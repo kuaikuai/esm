@@ -25,10 +25,8 @@ import (
 	"fmt"
 	log "github.com/cihub/seelog"
 	"github.com/parnurzeal/gorequest"
-	"infini.sh/framework/core/util"
-	"infini.sh/framework/lib/fasthttp"
+        "github.com/valyala/fasthttp"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -208,7 +206,8 @@ func DoRequest(compress bool,method string,loadUrl string,auth *Auth,body []byte
 		panic("empty response")
 	}
 
-	log.Debug("received status code", resp.StatusCode, "from", string(resp.Header.Header()), "content", util.SubString(string(resp.Body()),0,500), req)
+	log.Debug("received status code", resp.StatusCode, "from", string(resp.Header.Header()), "content",
+		SubString(string(resp.Body()), 0, 500), req)
 
 	if resp.StatusCode() == http.StatusOK || resp.StatusCode() == http.StatusCreated {
 
@@ -281,7 +280,7 @@ func Request(method string,r string,auth *Auth,body *bytes.Buffer,proxy string)(
 
 	resp,errs := client.Do(reqest)
 	if errs != nil {
-		log.Error(util.SubString(errs.Error(),0,500))
+		log.Error(SubString(errs.Error(), 0, 500))
 		return "",errs
 	}
 
@@ -291,23 +290,23 @@ func Request(method string,r string,auth *Auth,body *bytes.Buffer,proxy string)(
 	}
 
 	if resp.StatusCode != 200 {
-		b, _ := ioutil.ReadAll(resp.Body)
+		b, _ := io.ReadAll(resp.Body)
 		return "",errors.New("server error: "+string(b))
 	}
 
-	respBody,err:=ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 
-	log.Error(util.SubString(string(respBody),0,500))
+	log.Error(SubString(string(respBody), 0, 500))
 
 	if err != nil {
-		log.Error(util.SubString(string(err.Error()),0,500))
+		log.Error(SubString(string(err.Error()), 0, 500))
 		return string(respBody),err
 	}
 
 	if err != nil {
 		return string(respBody),err
 	}
-	io.Copy(ioutil.Discard, resp.Body)
+	io.Copy(io.Discard, resp.Body)
 	defer resp.Body.Close()
 	return string(respBody),nil
 }

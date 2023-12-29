@@ -26,7 +26,7 @@ import (
 	"io/ioutil"
 	"strings"
 	"regexp"
-	"infini.sh/framework/core/util"
+	//"infini.sh/framework/core/util"
 )
 
 type ESAPIV6 struct {
@@ -199,7 +199,7 @@ func (s *ESAPIV6) UpdateIndexMapping(indexName string,settings map[string]interf
 		res, err := Request("POST", url, s.Auth, &body,s.HttpProxy)
 		if(err!=nil){
 			log.Error(url)
-			log.Error(util.ToJson(settings,false))
+			log.Error(settings)
 			log.Error(err,res)
 			panic(err)
 		}
