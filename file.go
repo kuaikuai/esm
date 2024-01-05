@@ -17,24 +17,25 @@ limitations under the License.
 package main
 
 import (
-	"sync"
-	"github.com/cheggaaa/pb"
-	log "github.com/cihub/seelog"
-	"os"
 	"bufio"
 	"encoding/json"
+	"github.com/cheggaaa/pb"
+	log "github.com/cihub/seelog"
 	"io"
+	"os"
+	"strings"
+	"sync"
 )
 
-func checkFileIsExist(filename string) (bool) {
-	var exist = true;
+func checkFileIsExist(filename string) bool {
+	var exist = true
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		exist = false;
+		exist = false
 	}
-	return exist;
+	return exist
 }
 
-func (m *Migrator) NewFileReadWorker(pb *pb.ProgressBar, wg *sync.WaitGroup)  {
+func (m *Migrator) NewFileReadWorker(pb *pb.ProgressBar, wg *sync.WaitGroup) {
 	log.Debug("start reading file")
 	f, err := os.Open(m.Config.DumpInputFile)
 	if err != nil {
@@ -45,16 +46,16 @@ func (m *Migrator) NewFileReadWorker(pb *pb.ProgressBar, wg *sync.WaitGroup)  {
 	defer f.Close()
 	r := bufio.NewReader(f)
 	lineCount := 0
-	for{
-		line,err := r.ReadString('\n')
-		if io.EOF == err || nil != err{
+	for {
+		line, err := r.ReadString('\n')
+		if io.EOF == err || nil != err {
 			break
 		}
 		lineCount += 1
 		js := map[string]interface{}{}
 
 		err = DecodeJson(line, &js)
-		if err!=nil {
+		if err != nil {
 			log.Error(err)
 			continue
 		}
@@ -70,26 +71,44 @@ func (m *Migrator) NewFileReadWorker(pb *pb.ProgressBar, wg *sync.WaitGroup)  {
 
 func (c *Migrator) NewFileDumpWorker(pb *pb.ProgressBar, wg *sync.WaitGroup) {
 	var f *os.File
-	var err1   error;
+	var err1 error
 
 	if checkFileIsExist(c.Config.DumpOutFile) {
-		f, err1 = os.OpenFile(c.Config.DumpOutFile, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
-		if(err1!=nil){
+		flag := os.O_WRONLY
+		if c.Config.TruncateOutFile {
+			flag |= os.O_TRUNC
+		} else {
+			flag |= os.O_APPEND
+		}
+		f, err1 = os.OpenFile(c.Config.DumpOutFile, flag, os.ModeAppend)
+		if err1 != nil {
 			log.Error(err1)
 			return
 		}
 
-	}else {
+	} else {
 		f, err1 = os.Create(c.Config.DumpOutFile)
-		if(err1!=nil){
+		if err1 != nil {
 			log.Error(err1)
 			return
 		}
 	}
 
 	w := bufio.NewWriter(f)
+	skipFields := make([]string, 0)
+	if len(c.Config.SkipFields) > 0 {
+		//skip fields
+		if !strings.Contains(c.Config.SkipFields, ",") {
+			skipFields = append(skipFields, c.Config.SkipFields)
+		} else {
+			fields := strings.Split(c.Config.SkipFields, ",")
+			for _, field := range fields {
+				skipFields = append(skipFields, field)
+			}
+		}
+	}
 
-	READ_DOCS:
+READ_DOCS:
 	for {
 		docI, open := <-c.DocChan
 		// this check is in case the document is an error with scroll stuff
@@ -106,15 +125,20 @@ func (c *Migrator) NewFileDumpWorker(pb *pb.ProgressBar, wg *sync.WaitGroup) {
 				break READ_DOCS
 			}
 		}
+		for _, key := range skipFields {
+			if _, found := docI[key]; found {
+				delete(docI, key)
+			}
+		}
 
-		jsr,err:=json.Marshal(docI)
+		jsr, err := json.Marshal(docI)
 		log.Trace(string(jsr))
-		if(err!=nil){
+		if err != nil {
 			log.Error(err)
 		}
-		n,err:=w.WriteString(string(jsr))
-		if(err!=nil){
-			log.Error(n,err)
+		n, err := w.WriteString(string(jsr))
+		if err != nil {
+			log.Error(n, err)
 		}
 		w.WriteString("\n")
 		pb.Increment()
@@ -125,12 +149,10 @@ func (c *Migrator) NewFileDumpWorker(pb *pb.ProgressBar, wg *sync.WaitGroup) {
 		}
 	}
 
-	WORKER_DONE:
+WORKER_DONE:
 	w.Flush()
 	f.Close()
 
 	wg.Done()
 	log.Debug("file dump finished")
 }
-
-

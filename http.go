@@ -25,38 +25,37 @@ import (
 	"fmt"
 	log "github.com/cihub/seelog"
 	"github.com/parnurzeal/gorequest"
-        "github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 )
 
-func BasicAuth(req *fasthttp.Request,user,pass string) {
-	msg := fmt.Sprintf("%s:%s",user,pass)
+func BasicAuth(req *fasthttp.Request, user, pass string) {
+	msg := fmt.Sprintf("%s:%s", user, pass)
 	encoded := base64.StdEncoding.EncodeToString([]byte(msg))
 	req.Header.Add("Authorization", "Basic "+encoded)
 }
 
-func Get(url string,auth *Auth,proxy string) (*http.Response, string, []error) {
+func Get(url string, auth *Auth, proxy string) (*http.Response, string, []error) {
 
 	request := gorequest.New()
 
 	tr := &http.Transport{
-		DisableKeepAlives: true,
+		DisableKeepAlives:  true,
 		DisableCompression: false,
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
 	}
-	request.Transport=tr
+	request.Transport = tr
 
-
-	if(auth!=nil){
-		request.SetBasicAuth(auth.User,auth.Pass)
+	if auth != nil {
+		request.SetBasicAuth(auth.User, auth.Pass)
 	}
 
 	//request.Type("application/json")
 
-	if(len(proxy)>0){
+	if len(proxy) > 0 {
 		request.Proxy(proxy)
 	}
 
@@ -65,35 +64,35 @@ func Get(url string,auth *Auth,proxy string) (*http.Response, string, []error) {
 
 }
 
-func Post(url string,auth *Auth, body string,proxy string)(*http.Response, string, []error)  {
+func Post(url string, auth *Auth, body string, proxy string) (*http.Response, string, []error) {
 	request := gorequest.New()
 	tr := &http.Transport{
-		DisableKeepAlives: true,
+		DisableKeepAlives:  true,
 		DisableCompression: false,
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
 	}
-	request.Transport=tr
+	request.Transport = tr
 
-	if(auth!=nil){
-		request.SetBasicAuth(auth.User,auth.Pass)
+	if auth != nil {
+		request.SetBasicAuth(auth.User, auth.Pass)
 	}
 
 	//request.Type("application/json")
-	
-	if(len(proxy)>0){
+
+	if len(proxy) > 0 {
 		request.Proxy(proxy)
 	}
 
 	request.Post(url)
 
-	if(len(body)>0) {
+	if len(body) > 0 {
 		request.Send(body)
 	}
 
 	return request.End()
 }
 
-func newDeleteRequest(client *http.Client,method, urlStr string) (*http.Request, error) {
+func newDeleteRequest(client *http.Client, method, urlStr string) (*http.Request, error) {
 	if method == "" {
 		// We document that "" means "GET" for Request.Method, and people have
 		// relied on that from NewRequest, so keep that working.
@@ -117,23 +116,9 @@ func newDeleteRequest(client *http.Client,method, urlStr string) (*http.Request,
 	return req, nil
 }
 
-//
-//func GzipHandler(req *http.Request) {
-//	var b bytes.Buffer
-//	var buf bytes.Buffer
-//	g := gzip.NewWriter(&buf)
-//
-//	_, err := io.Copy(g, &b)
-//	if err != nil {
-//		panic(err)
-//		//slog.Error(err)
-//		return
-//	}
-//}
-
-var client *http.Client=&http.Client{
+var client = &http.Client{
 	Transport: &http.Transport{
-		DisableKeepAlives: true,
+		DisableKeepAlives:  true,
 		DisableCompression: false,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
@@ -144,7 +129,7 @@ var fastHttpClient = &fasthttp.Client{
 	TLSConfig: &tls.Config{InsecureSkipVerify: true},
 }
 
-func DoRequest(compress bool,method string,loadUrl string,auth *Auth,body []byte,proxy string) (string,error)  {
+func DoRequest(compress bool, method string, loadUrl string, auth *Auth, body []byte, proxy string) (string, error) {
 
 	req := fasthttp.AcquireRequest()
 	resp := fasthttp.AcquireResponse()
@@ -161,46 +146,26 @@ func DoRequest(compress bool,method string,loadUrl string,auth *Auth,body []byte
 		req.Header.Set("content-encoding", "gzip")
 	}
 
-	if auth!=nil{
+	if auth != nil {
 		req.URI().SetUsername(auth.User)
 		req.URI().SetPassword(auth.Pass)
 	}
 
-	if len(body)>0{
-
-		//if compress {
-		//	_, err := fasthttp.WriteGzipLevel(req.BodyWriter(), data.Bytes(), fasthttp.CompressBestSpeed)
-		//	if err != nil {
-		//		panic(err)
-		//	}
-		//} else {
-		//	//req.SetBody(body)
-		//	req.SetBodyStreamWriter(func(w *bufio.Writer) {
-		//		w.Write(data.Bytes())
-		//		w.Flush()
-		//	})
-		//
-		//}
-
-		if compress{
+	if len(body) > 0 {
+		if compress {
 			_, err := fasthttp.WriteGzipLevel(req.BodyWriter(), body, fasthttp.CompressBestSpeed)
 			if err != nil {
 				panic(err)
 			}
-		}else{
+		} else {
 			req.SetBody(body)
-
-			//req.SetBodyStreamWriter(func(w *bufio.Writer) {
-			//	w.Write(body)
-			//	w.Flush()
-			//})
 		}
 	}
 
-	err:=fastHttpClient.Do(req, resp)
+	err := fastHttpClient.Do(req, resp)
 
 	if err != nil {
-			panic(err)
+		panic(err)
 	}
 	if resp == nil {
 		panic("empty response")
@@ -215,62 +180,40 @@ func DoRequest(compress bool,method string,loadUrl string,auth *Auth,body []byte
 		//log.Error("received status code", resp.StatusCode, "from", string(resp.Header.Header()), "content", string(resp.Body()), req)
 	}
 
-
-
 	//if compress{
 	//	data,err:= resp.BodyGunzip()
 	//	return string(data),err
 	//}
 
-	return string(resp.Body()),nil
+	return string(resp.Body()), nil
 }
 
-
-func Request(method string,r string,auth *Auth,body *bytes.Buffer,proxy string)(string,error)  {
-
-	//TODO use global client
-	//client = &http.Client{}
-	//
-	//if(len(proxy)>0){
-	//	proxyURL, err := url.Parse(proxy)
-	//	if(err!=nil){
-	//		log.Error(err)
-	//	}else{
-	//		transport := &http.Transport{
-	//			Proxy: http.ProxyURL(proxyURL),
-	//			DisableKeepAlives: true,
-	//			DisableCompression: false,
-	//		}
-	//		client = &http.Client{Transport: transport}
-	//	}
-	//}
-	//
-	//tr := &http.Transport{
-	//	DisableKeepAlives: true,
-	//	DisableCompression: false,
-	//	TLSClientConfig: &tls.Config{
-	//		InsecureSkipVerify: true,
-	//},
-	//}
-	//
-	//client.Transport=tr
+func Request(compress bool, method string, loadUrl string, auth *Auth, body *bytes.Buffer, proxy string) (string, error) {
 
 	var err error
 	var reqest *http.Request
-	if body!=nil {
-		reqest, err =http.NewRequest(method,r,body)
-	}else{
-		reqest, err = newDeleteRequest(client,method,r)
+	if body != nil {
+		reqest, err = http.NewRequest(method, loadUrl, body)
+	} else {
+		reqest, err = newDeleteRequest(client, method, loadUrl)
 	}
 
-	if err!=nil {
+	if err != nil {
 		panic(err)
 	}
 
-	if auth!=nil {
-		reqest.SetBasicAuth(auth.User,auth.Pass)
+	if auth != nil {
+		reqest.SetBasicAuth(auth.User, auth.Pass)
 	}
 
+	oldTransport := client.Transport.(*http.Transport)
+	if len(proxy) > 0 {
+		proxyUrl := VerifyWithResult(url.Parse(proxy)).(*url.URL)
+		proxyFunc := http.ProxyURL(proxyUrl)
+		oldTransport.Proxy = proxyFunc
+	} else {
+		oldTransport.Proxy = nil
+	}
 	reqest.Header.Set("Content-Type", "application/json")
 
 	//enable gzip
@@ -278,41 +221,40 @@ func Request(method string,r string,auth *Auth,body *bytes.Buffer,proxy string)(
 	//GzipHandler(reqest)
 	//
 
-	resp,errs := client.Do(reqest)
+	resp, errs := client.Do(reqest)
 	if errs != nil {
 		log.Error(SubString(errs.Error(), 0, 500))
-		return "",errs
+		return "", errs
 	}
 
-	if resp!=nil&& resp.Body!=nil{
+	if resp != nil && resp.Body != nil {
 		//io.Copy(ioutil.Discard, resp.Body)
 		defer resp.Body.Close()
 	}
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
-		return "",errors.New("server error: "+string(b))
+		return "", errors.New("server error: " + string(b))
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
 
-	log.Error(SubString(string(respBody), 0, 500))
+	//log.Error(SubString(string(respBody), 0, 500))
 
 	if err != nil {
 		log.Error(SubString(string(err.Error()), 0, 500))
-		return string(respBody),err
+		return string(respBody), err
 	}
 
 	if err != nil {
-		return string(respBody),err
+		return string(respBody), err
 	}
 	io.Copy(io.Discard, resp.Body)
 	defer resp.Body.Close()
-	return string(respBody),nil
+	return string(respBody), nil
 }
 
-func DecodeJson(jsonStream string, o interface{})(error) {
-
+func DecodeJson(jsonStream string, o interface{}) error {
 
 	decoder := json.NewDecoder(strings.NewReader(jsonStream))
 	// UseNumber causes the Decoder to unmarshal a number into an interface{} as a Number instead of as a float64.
@@ -326,7 +268,7 @@ func DecodeJson(jsonStream string, o interface{})(error) {
 	return nil
 }
 
-func DecodeJsonBytes(jsonStream []byte, o interface{})(error) {
+func DecodeJsonBytes(jsonStream []byte, o interface{}) error {
 	decoder := json.NewDecoder(bytes.NewReader(jsonStream))
 	// UseNumber causes the Decoder to unmarshal a number into an interface{} as a Number instead of as a float64.
 	decoder.UseNumber()

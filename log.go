@@ -17,8 +17,8 @@ limitations under the License.
 package main
 
 import (
-	"strings"
 	log "github.com/cihub/seelog"
+	"strings"
 )
 
 func setInitLogging(logLevel string) {
@@ -36,7 +36,7 @@ func setInitLogging(logLevel string) {
 			<console formatid="main" />
 		</outputs>
 		<formats>
-			<format id="main" format="[%Date(01-02) %Time] [%LEV] [%File:%Line,%FuncShort] %Msg%n"/>
+			<format id="main" format="[%Date(01-02) %Time] [%LEV] [ %File:%Line ,%FuncShort] %Msg%n"/>
 		</formats>
 	</seelog>`
 

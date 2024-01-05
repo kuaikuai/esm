@@ -24,8 +24,8 @@ import (
 	log "github.com/cihub/seelog"
 	"io"
 	"io/ioutil"
-	"strings"
 	"regexp"
+	"strings"
 	//"infini.sh/framework/core/util"
 )
 
@@ -33,7 +33,8 @@ type ESAPIV6 struct {
 	ESAPIV5
 }
 
-func (s *ESAPIV6) NewScroll(indexNames string, scrollTime string, docBufferCount int, query string, slicedId, maxSlicedCount int, fields string) (scroll interface{}, err error) {
+func (s *ESAPIV6) NewScroll(indexNames string, scrollTime string, docBufferCount int, query string, sort string,
+	slicedId int, maxSlicedCount int, fields string) (scroll ScrollAPI, err error) {
 	url := fmt.Sprintf("%s/%s/_search?scroll=%s&size=%d", s.Host, indexNames, scrollTime, docBufferCount)
 
 	var jsonBody []byte
@@ -54,6 +55,12 @@ func (s *ESAPIV6) NewScroll(indexNames string, scrollTime string, docBufferCount
 			queryBody["query"].(map[string]interface{})["query_string"].(map[string]interface{})["query"] = query
 		}
 
+		if len(sort) > 0 {
+			sortFields := make([]string, 0)
+			sortFields = append(sortFields, sort)
+			queryBody["sort"] = sortFields
+		}
+
 		if maxSlicedCount > 1 {
 			log.Tracef("sliced scroll, %d of %d", slicedId, maxSlicedCount)
 			queryBody["slice"] = map[string]interface{}{}
@@ -68,7 +75,7 @@ func (s *ESAPIV6) NewScroll(indexNames string, scrollTime string, docBufferCount
 		}
 	}
 
-	body, err := DoRequest(s.Compress,"POST",url, s.Auth,jsonBody,s.HttpProxy)
+	body, err := Request(s.Compress, "POST", url, s.Auth, bytes.NewBuffer(jsonBody), s.HttpProxy)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -84,11 +91,11 @@ func (s *ESAPIV6) NewScroll(indexNames string, scrollTime string, docBufferCount
 	return scroll, err
 }
 
-func (s *ESAPIV6) NextScroll(scrollTime string, scrollId string) (interface{}, error) {
+func (s *ESAPIV6) NextScroll(scrollTime string, scrollId string) (ScrollAPI, error) {
 	id := bytes.NewBufferString(scrollId)
 
 	url := fmt.Sprintf("%s/_search/scroll?scroll=%s&scroll_id=%s", s.Host, scrollTime, id)
-	body,err:=DoRequest(s.Compress,"GET",url,s.Auth,nil,s.HttpProxy)
+	body, err := Request(s.Compress, "GET", url, s.Auth, nil, s.HttpProxy)
 
 	// decode elasticsearch scroll response
 	scroll := &Scroll{}
@@ -101,21 +108,11 @@ func (s *ESAPIV6) NextScroll(scrollTime string, scrollId string) (interface{}, e
 	return scroll, nil
 }
 
-
-func (s *ESAPIV6) GetIndexSettings(indexNames string) (*Indexes,error){
-	return s.ESAPIV0.GetIndexSettings(indexNames)
-}
-
-func (s *ESAPIV6) UpdateIndexSettings(indexName string,settings map[string]interface{})(error){
-	return s.ESAPIV0.UpdateIndexSettings(indexName,settings)
-}
-
-
 func (s *ESAPIV6) GetIndexMappings(copyAllIndexes bool, indexNames string) (string, int, *Indexes, error) {
 	url := fmt.Sprintf("%s/%s/_mapping", s.Host, indexNames)
-	resp, body, errs := Get(url, s.Auth,s.HttpProxy)
+	resp, body, errs := Get(url, s.Auth, s.HttpProxy)
 
-	if resp!=nil&& resp.Body!=nil{
+	if resp != nil && resp.Body != nil {
 		io.Copy(ioutil.Discard, resp.Body)
 		defer resp.Body.Close()
 	}
@@ -124,7 +121,6 @@ func (s *ESAPIV6) GetIndexMappings(copyAllIndexes bool, indexNames string) (stri
 		log.Error(errs)
 		return "", 0, nil, errs[0]
 	}
-
 
 	if resp.StatusCode != 200 {
 		return "", 0, nil, errors.New(body)
@@ -178,29 +174,26 @@ func (s *ESAPIV6) GetIndexMappings(copyAllIndexes bool, indexNames string) (stri
 	return indexNames, i, &idxs, nil
 }
 
-
-func (s *ESAPIV6) UpdateIndexMapping(indexName string,settings map[string]interface{}) error {
+func (s *ESAPIV6) UpdateIndexMapping(indexName string, settings map[string]interface{}) error {
 
 	log.Debug("start update mapping: ", indexName, settings)
 
-	delete(settings,"dynamic_templates")
-
-
+	delete(settings, "dynamic_templates")
 
 	for name, _ := range settings {
 
-		log.Debug("start update mapping: ", indexName,", ",settings)
+		log.Debug("start update mapping: ", indexName, ", ", settings)
 
-		url := fmt.Sprintf("%s/%s/%s/_mapping", s.Host, indexName,name)
+		url := fmt.Sprintf("%s/%s/%s/_mapping", s.Host, indexName, name)
 
 		body := bytes.Buffer{}
 		enc := json.NewEncoder(&body)
 		enc.Encode(settings)
-		res, err := Request("POST", url, s.Auth, &body,s.HttpProxy)
-		if(err!=nil){
+		res, err := Request(s.Compress, "POST", url, s.Auth, &body, s.HttpProxy)
+		if err != nil {
 			log.Error(url)
 			log.Error(settings)
-			log.Error(err,res)
+			log.Error(err, res)
 			panic(err)
 		}
 	}

@@ -23,6 +23,7 @@ Links:
 *  Support specify which _source fields to return from source
 *  Support specify query string query to filter the data source
 *  Support rename source fields while do bulk indexing
+*  Support incremental update(add/update/delete changed records) with `--sync`. Notice: it use different implementation, just handle the ***changed*** records, but not as fast as the old way
 *  Load generating with 
 
 ## ESM is fast!
@@ -69,6 +70,11 @@ copy index `src_index` from `192.168.1.x` to `192.168.1.y:9200` and save with `d
 ./bin/esm -s http://localhost:9200 -d http://localhost:9200 -x src_index -y dest_index -w=5 -b=100
 ```
 
+use sync feature for incremental update index `src_index` from `192.168.1.x` to `192.168.1.y:9200`
+```
+./bin/esm --sync -s http://localhost:9200 -d http://localhost:9200 -x src_index -y dest_index
+```
+
 support Basic-Auth
 ```
 ./bin/esm -s http://localhost:9200 -x "src_index" -y "dest_index"  -d http://localhost:9201 -n admin:111111
@@ -89,6 +95,13 @@ copy settings and mapping, recreate target index, add query to source fetch, ref
 dump elasticsearch documents into local file
 ```
 ./bin/esm -s http://localhost:9200 -x "src_index"  -m admin:111111 -c 5000 -q=query:mixer  --refresh -o=dump.bin 
+```
+
+dump source and target index to local file and compare them, so can find the difference quickly
+```
+./bin/esm --sort=_id -s http://localhost:9200 -x "src_index" --truncate_output --skip=_index -o=src.json
+./bin/esm --sort=_id -s http://localhost:9200 -x "dst_index" --truncate_output --skip=_index -o=dst.json
+diff -W 200 -ry --suppress-common-lines src.json dst.json
 ```
 
 loading data from dump files, bulk insert to another es instance
@@ -172,6 +185,7 @@ Usage:
 Application Options:
   -s, --source=                    source elasticsearch instance, ie: http://localhost:9200
   -q, --query=                     query against source elasticsearch instance, filter data before migrate, ie: name:medcl
+      --sort=                      sort field when scroll, ie: _id (default: _id)
   -d, --dest=                      destination elasticsearch instance, ie: http://localhost:9201
   -m, --source_auth=               basic auth of source elasticsearch instance, ie: user:pass
   -n, --dest_auth=                 basic auth of target elasticsearch instance, ie: user:pass
@@ -192,12 +206,15 @@ Application Options:
       --green                      wait for both hosts cluster status to be green before dump. otherwise yellow is okay
   -v, --log=                       setting log level,options:trace,debug,info,warn,error (INFO)
   -o, --output_file=               output documents of source index into local file
+      --truncate_output=           truncate before dump to output file
   -i, --input_file=                indexing from local dump file
       --input_file_type=           the data type of input file, options: dump, json_line, json_array, log_line (dump)
       --source_proxy=              set proxy to source http connections, ie: http://127.0.0.1:8080
       --dest_proxy=                set proxy to target http connections, ie: http://127.0.0.1:8080
       --refresh                    refresh after migration finished
-      --fields=                    filter source fields, comma separated, ie: col1,col2,col3,...
+      --sync=                      sync will use scroll for both source and target index, compare the data and sync(index/update/delete)
+      --fields=                    filter source fields(white list), comma separated, ie: col1,col2,col3,...
+      --skip=                      skip source fields(black list), comma separated, ie: col1,col2,col3,...
       --rename=                    rename source fields, comma separated, ie: _type:type, name:myname
   -l, --logstash_endpoint=         target logstash tcp endpoint, ie: 127.0.0.1:5055
       --secured_logstash_endpoint  target logstash tcp endpoint was secured by TLS

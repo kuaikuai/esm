@@ -2,14 +2,11 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
-	"fmt"
 	"github.com/cheggaaa/pb"
 	log "github.com/cihub/seelog"
 	goflags "github.com/jessevdk/go-flags"
 	"github.com/mattn/go-isatty"
 	"io"
-	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -21,7 +18,6 @@ import (
 )
 
 func main() {
-
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	go func() {
@@ -77,10 +73,30 @@ func main() {
 		showBar = false
 	}
 
+	if c.Sync {
+		//sync 功能时,只支持一个 index:
+		if len(c.SourceIndexNames) == 0 || len(c.TargetIndexName) == 0 {
+			log.Error("migration sync only support source 1 index to 1 target index")
+			return
+		}
+		migrator.SourceESAPI = migrator.ParseEsApi(true, c.SourceEs, c.SourceEsAuthStr, c.SourceProxy, c.Compress)
+		if migrator.SourceESAPI == nil {
+			log.Error("can not parse source es api")
+			return
+		}
+		migrator.TargetESAPI = migrator.ParseEsApi(false, c.TargetEs, c.TargetEsAuthStr, c.TargetProxy, false)
+		if migrator.TargetESAPI == nil {
+			log.Error("can not parse target es api")
+			return
+		}
+		migrator.SyncBetweenIndex(migrator.SourceESAPI, migrator.TargetESAPI, c)
+		return
+	}
+
 	//至少输出一次
 	if c.RepeatOutputTimes < 1 {
-		c.RepeatOutputTimes=1
-	}else{
+		c.RepeatOutputTimes = 1
+	} else {
 		log.Info("source data will repeat send to target: ", c.RepeatOutputTimes, " times, the document id will be regenerated.")
 	}
 
@@ -88,14 +104,14 @@ func main() {
 
 		for i := 0; i < c.RepeatOutputTimes; i++ {
 
-			if c.RepeatOutputTimes>1 {
+			if c.RepeatOutputTimes > 1 {
 				log.Info("repeat round: ", i+1)
 			}
 
 			// enough of a buffer to hold all the search results across all workers
 			migrator.DocChan = make(chan map[string]interface{}, c.BufferCount)
 
-			var srcESVersion *ClusterVersion
+			//var srcESVersion *ClusterVersion
 			// create a progressbar and start a docCount
 			var outputBar *pb.ProgressBar = pb.New(1).Prefix("Output ")
 
@@ -106,49 +122,12 @@ func main() {
 			//dealing with input
 			if len(c.SourceEs) > 0 {
 				//dealing with basic auth
-				if len(c.SourceEsAuthStr) > 0 && strings.Contains(c.SourceEsAuthStr, ":") {
-					authArray := strings.Split(c.SourceEsAuthStr, ":")
-					auth := Auth{User: authArray[0], Pass: authArray[1]}
-					migrator.SourceAuth = &auth
-				}
 
-				//get source es version
-				srcESVersion, errs := migrator.ClusterVersion(c.SourceEs, migrator.SourceAuth, migrator.Config.SourceProxy)
-				if errs != nil {
+				migrator.SourceESAPI = migrator.ParseEsApi(true, c.SourceEs, c.SourceEsAuthStr,
+					migrator.Config.SourceProxy, c.Compress)
+				if migrator.SourceESAPI == nil {
+					log.Error("can not parse source es api")
 					return
-				}
-				if strings.HasPrefix(srcESVersion.Version.Number, "7.") {
-					log.Debug("source es is V7,", srcESVersion.Version.Number)
-					api := new(ESAPIV7)
-					api.Host = c.SourceEs
-					api.Compress=c.Compress
-					api.Auth = migrator.SourceAuth
-					api.HttpProxy = migrator.Config.SourceProxy
-					migrator.SourceESAPI = api
-				} else if strings.HasPrefix(srcESVersion.Version.Number, "6.") {
-					log.Debug("source es is V6,", srcESVersion.Version.Number)
-					api := new(ESAPIV6)
-					api.Compress=c.Compress
-					api.Host = c.SourceEs
-					api.Auth = migrator.SourceAuth
-					api.HttpProxy = migrator.Config.SourceProxy
-					migrator.SourceESAPI = api
-				} else if strings.HasPrefix(srcESVersion.Version.Number, "5.") {
-					log.Debug("source es is V5,", srcESVersion.Version.Number)
-					api := new(ESAPIV5)
-					api.Host = c.SourceEs
-					api.Compress=c.Compress
-					api.Auth = migrator.SourceAuth
-					api.HttpProxy = migrator.Config.SourceProxy
-					migrator.SourceESAPI = api
-				} else {
-					log.Debug("source es is not V5,", srcESVersion.Version.Number)
-					api := new(ESAPIV0)
-					api.Host = c.SourceEs
-					api.Compress=c.Compress
-					api.Auth = migrator.SourceAuth
-					api.HttpProxy = migrator.Config.SourceProxy
-					migrator.SourceESAPI = api
 				}
 
 				if c.ScrollSliceSize < 1 {
@@ -158,19 +137,18 @@ func main() {
 				totalSize := 0
 				finishedSlice := 0
 				for slice := 0; slice < c.ScrollSliceSize; slice++ {
-					scroll, err := migrator.SourceESAPI.NewScroll(c.SourceIndexNames, c.ScrollTime, c.DocBufferCount, c.Query, slice, c.ScrollSliceSize, c.Fields)
+					scroll, err := migrator.SourceESAPI.NewScroll(c.SourceIndexNames, c.ScrollTime, c.DocBufferCount, c.Query,
+						c.SortField, slice, c.ScrollSliceSize, c.Fields)
 					if err != nil {
 						log.Error(err)
 						return
 					}
 
-					temp := scroll.(ScrollAPI)
+					totalSize += scroll.GetHitsTotal()
 
-					totalSize += temp.GetHitsTotal()
+					if scroll.GetDocs() != nil {
 
-					if scroll != nil && temp.GetDocs() != nil {
-
-						if temp.GetHitsTotal() == 0 {
+						if scroll.GetHitsTotal() == 0 {
 							log.Error("can't find documents from source.")
 							return
 						}
@@ -179,10 +157,10 @@ func main() {
 							wg.Add(1)
 							//process input
 							// start scroll
-							temp.ProcessScrollResult(&migrator, fetchBar)
+							scroll.ProcessScrollResult(&migrator, fetchBar)
 
 							// loop scrolling until done
-							for temp.Next(&migrator, fetchBar) == false {
+							for scroll.Next(&migrator, fetchBar) == false {
 							}
 
 							if showBar {
@@ -255,46 +233,20 @@ func main() {
 					migrator.TargetAuth = &auth
 				}
 
-				//get target es version
-				descESVersion, errs := migrator.ClusterVersion(c.TargetEs, migrator.TargetAuth, migrator.Config.TargetProxy)
-				if errs != nil {
+				//get target es api
+				migrator.TargetESAPI = migrator.ParseEsApi(false, c.TargetEs, c.TargetEsAuthStr,
+					migrator.Config.TargetProxy, false)
+				if migrator.TargetESAPI == nil {
+					log.Error("can not parse target es api")
 					return
 				}
 
-				if strings.HasPrefix(descESVersion.Version.Number, "7.") {
-					log.Debug("target es is V7,", descESVersion.Version.Number)
-					api := new(ESAPIV7)
-					api.Host = c.TargetEs
-					api.Auth = migrator.TargetAuth
-					api.HttpProxy = migrator.Config.TargetProxy
-					migrator.TargetESAPI = api
-				} else if strings.HasPrefix(descESVersion.Version.Number, "6.") {
-					log.Debug("target es is V6,", descESVersion.Version.Number)
-					api := new(ESAPIV6)
-					api.Host = c.TargetEs
-					api.Auth = migrator.TargetAuth
-					api.HttpProxy = migrator.Config.TargetProxy
-					migrator.TargetESAPI = api
-				} else if strings.HasPrefix(descESVersion.Version.Number, "5.") {
-					log.Debug("target es is V5,", descESVersion.Version.Number)
-					api := new(ESAPIV5)
-					api.Host = c.TargetEs
-					api.Auth = migrator.TargetAuth
-					api.HttpProxy = migrator.Config.TargetProxy
-					migrator.TargetESAPI = api
-				} else {
-					log.Debug("target es is not V5,", descESVersion.Version.Number)
-					api := new(ESAPIV0)
-					api.Host = c.TargetEs
-					api.Auth = migrator.TargetAuth
-					api.HttpProxy = migrator.Config.TargetProxy
-					migrator.TargetESAPI = api
-
-				}
-
 				log.Debug("start process with mappings")
-				if srcESVersion != nil && c.CopyIndexMappings && descESVersion.Version.Number[0] != srcESVersion.Version.Number[0] {
-					log.Error(srcESVersion.Version, "=>", descESVersion.Version, ",cross-big-version mapping migration not avaiable, please update mapping manually :(")
+				if c.CopyIndexMappings &&
+					migrator.TargetESAPI.ClusterVersion().Version.Number[0] != migrator.SourceESAPI.ClusterVersion().Version.Number[0] {
+					log.Error(migrator.SourceESAPI.ClusterVersion().Version, "=>",
+						migrator.TargetESAPI.ClusterVersion().Version,
+						",cross-big-version mapping migration not available, please update mapping manually :(")
 					return
 				}
 
@@ -506,66 +458,4 @@ func main() {
 	}
 
 	log.Info("data migration finished.")
-}
-
-func (c *Migrator) recoveryIndexSettings(sourceIndexRefreshSettings map[string]interface{}) {
-	//update replica and refresh_interval
-	for name, interval := range sourceIndexRefreshSettings {
-		tempIndexSettings := getEmptyIndexSettings()
-		tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["refresh_interval"] = interval
-		//tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_replicas"] = 1
-		c.TargetESAPI.UpdateIndexSettings(name, tempIndexSettings)
-		if c.Config.Refresh {
-			c.TargetESAPI.Refresh(name)
-		}
-	}
-}
-
-func (c *Migrator) ClusterVersion(host string, auth *Auth, proxy string) (*ClusterVersion, []error) {
-
-	url := fmt.Sprintf("%s", host)
-	resp, body, errs := Get(url, auth, proxy)
-
-	if resp != nil && resp.Body != nil {
-		io.Copy(ioutil.Discard, resp.Body)
-		defer resp.Body.Close()
-	}
-
-	if errs != nil {
-		log.Error(errs)
-		return nil, errs
-	}
-
-	log.Debug(body)
-
-	version := &ClusterVersion{}
-	err := json.Unmarshal([]byte(body), version)
-
-	if err != nil {
-		log.Error(body, errs)
-		return nil, errs
-	}
-	return version, nil
-}
-
-func (c *Migrator) ClusterReady(api ESAPI) (*ClusterHealth, bool) {
-	health := api.ClusterHealth()
-
-	if !c.Config.WaitForGreen {
-		return health, true
-	}
-
-	if health.Status == "red" {
-		return health, false
-	}
-
-	if c.Config.WaitForGreen == false && health.Status == "yellow" {
-		return health, true
-	}
-
-	if health.Status == "green" {
-		return health, true
-	}
-
-	return health, false
 }
