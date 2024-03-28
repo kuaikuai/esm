@@ -394,6 +394,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 	dstRecordIndex := 0
 	var err error
 	srcType := ""
+	dstType := ""
 	var srcScroll ScrollAPI = nil
 	var dstScroll ScrollAPI = nil
 	var emptyScroll = &EmptyScroll{}
@@ -480,6 +481,10 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 				srcId := srcDocI.(map[string]interface{})["_id"].(string)
 				srcSource := srcDocI.(map[string]interface{})["_source"]
 				srcType = srcDocI.(map[string]interface{})["_type"].(string)
+				dstType = srcType
+				if m.Config.OverrideTypeName != "" {
+					dstType = m.Config.OverrideTypeName
+				}
 				lastSrcId = srcId
 				log.Debugf("src [%d]: srcId=%s", srcRecordIndex+idx, srcId)
 
@@ -512,7 +517,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 
 		if len(diffDocMaps) > 0 {
 			log.Debugf("now will bulk index %d records", len(diffDocMaps))
-			_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, srcType, diffDocMaps))
+			_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, dstType, diffDocMaps))
 			diffDocMaps = make(map[string]interface{})
 		}
 
@@ -545,12 +550,12 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 
 			if len(srcDocMaps) > 0 {
 				addCount += len(srcDocMaps)
-				_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, srcType, srcDocMaps))
+				_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, dstType, srcDocMaps))
 			}
 			if len(dstDocMaps) > 0 {
 				//最后在 dst 中还有遗留的,表示 dst 中多的.需要删除
 				deleteCount += len(dstDocMaps)
-				_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, srcType, dstDocMaps))
+				_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, dstType, dstDocMaps))
 			}
 			break
 		}
