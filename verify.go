@@ -21,7 +21,7 @@ const (
 //     then can add error logical for the place that once thought could not go wrong
 //  2. when released, set to ACTION_LOG_ERROR, so just log error
 
-var verifyAction = ACTION_FATAL_QUIT
+var verifyAction = ACTION_LOG_ERROR
 
 // GetCallStackInfo return fileName, lineNo, funName
 func GetCallStackInfo(skip int) (string, int, string) {

@@ -79,6 +79,12 @@ func main() {
 			log.Error("migration sync only support source 1 index to 1 target index")
 			return
 		}
+		if len(c.SrcSortField) == 0 || len(c.DstSortField) == 0 {
+			log.Error("migration sync need set sort for both source and dest index")
+			return
+		}
+		log.Info("src sort id=%s, dest sort id=%s", c.SrcSortField, c.DstSortField)
+
 		migrator.SourceESAPI = migrator.ParseEsApi(true, c.SourceEs, c.SourceEsAuthStr, c.SourceProxy, c.Compress)
 		if migrator.SourceESAPI == nil {
 			log.Error("can not parse source es api")
@@ -138,7 +144,7 @@ func main() {
 				finishedSlice := 0
 				for slice := 0; slice < c.ScrollSliceSize; slice++ {
 					scroll, err := migrator.SourceESAPI.NewScroll(c.SourceIndexNames, c.ScrollTime, c.DocBufferCount, c.Query,
-						c.SortField, slice, c.ScrollSliceSize, c.Fields)
+						c.SrcSortField, slice, c.ScrollSliceSize, c.Fields)
 					if err != nil {
 						log.Error(err)
 						return
