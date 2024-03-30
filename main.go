@@ -83,7 +83,7 @@ func main() {
 			log.Error("migration sync need set sort for both source and dest index")
 			return
 		}
-		log.Info("src sort id=%s, dest sort id=%s", c.SrcSortField, c.DstSortField)
+		log.Infof("src sort id=%s, dest sort id=%s", c.SrcSortField, c.DstSortField)
 
 		migrator.SourceESAPI = migrator.ParseEsApi(true, c.SourceEs, c.SourceEsAuthStr, c.SourceProxy, c.Compress)
 		if migrator.SourceESAPI == nil {

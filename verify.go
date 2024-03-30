@@ -60,7 +60,7 @@ func Verify(err error) error {
 	return err
 }
 
-func VerifyWithResult(result interface{}, err error) interface{} {
+func VerifyWithResult[T any](result T, err error) T {
 	if err != nil {
 		checkAndHandleError(err, err.Error(), verifyAction, 3)
 	}

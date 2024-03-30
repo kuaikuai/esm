@@ -339,10 +339,11 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 
 	//var tempDestIndexName string
 	//var tempTargetTypeName string
+	log.Debugf("bulkRecords bulkOp=%s, len(diffDocMaps)=%d", bulkOp, len(diffDocMaps))
 
 	for docId, docData := range diffDocMaps {
 		docI := docData.(map[string]interface{})
-		log.Debugf("now will bulk %s docId=%s, docData=%+v", bulkOp, docId, docData)
+		log.Tracef("now will bulk %s docId=%s, docData=%+v", bulkOp, docId, docData)
 		//tempDestIndexName = docI["_index"].(string)
 		//tempTargetTypeName = docI["_type"].(string)
 		var strOperation string
@@ -390,6 +391,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 	dstDocMaps := make(map[string]interface{})
 	diffDocMaps := make(map[string]interface{})
 
+	srcTotalCount := 0
 	srcRecordIndex := 0
 	dstRecordIndex := 0
 	var err error
@@ -421,8 +423,9 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 				log.Infof("can not scroll for source index: %s, reason:%s", cfg.SourceIndexNames, err.Error())
 				return
 			}
-			log.Infof("src total count=%d", srcScroll.GetHitsTotal())
-			srcBar.Total = int64(srcScroll.GetHitsTotal())
+			srcTotalCount = srcScroll.GetHitsTotal()
+			log.Infof("src total count=%d", srcTotalCount)
+			srcBar.Total = int64(srcTotalCount)
 			srcBar.Start()
 		} else if needScrollSrc {
 			srcScroll = VerifyWithResult(srcEsApi.NextScroll(cfg.ScrollTime, srcScroll.GetScrollId())).(ScrollAPI)
@@ -454,7 +457,8 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 				destId := dstDocI.(map[string]interface{})["_id"].(string)
 				dstSource := dstDocI.(map[string]interface{})["_source"]
 				lastDestId = destId
-				log.Debugf("dst [%d]: dstId=%s", dstRecordIndex+idx, destId)
+				_ = idx
+				//log.Tracef("dst [%d]: dstId=%s", dstRecordIndex+idx, destId)
 
 				if srcSource, found := srcDocMaps[destId]; found {
 					delete(srcDocMaps, destId)
@@ -486,7 +490,8 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 					dstType = m.Config.OverrideTypeName
 				}
 				lastSrcId = srcId
-				log.Debugf("src [%d]: srcId=%s", srcRecordIndex+idx, srcId)
+				_ = idx
+				//log.Tracef("src [%d]: srcId=%s", srcRecordIndex+idx, srcId)
 
 				if len(lastDestId) == 0 {
 					//没有 destId, 表示 目标 index 中没有数据, 直接全部更新
@@ -516,46 +521,66 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 		}
 
 		if len(diffDocMaps) > 0 {
-			log.Infof("now will bulk index %d records", len(diffDocMaps))
+			log.Tracef("now will bulk index %d records", len(diffDocMaps))
 			_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, dstType, diffDocMaps))
 			diffDocMaps = make(map[string]interface{})
 		}
 
-		if lastSrcId == lastDestId {
-			needScrollSrc = true
-			needScrollDest = true
-		} else if len(lastDestId) == 0 || (lastSrcId < lastDestId || (needScrollDest == true && len(dstScroll.GetDocs()) == 0)) {
-			//上一次要求遍历 dest,但遍历出空
-			needScrollSrc = true
-			needScrollDest = false
-		} else if lastSrcId > lastDestId || (needScrollSrc == true && len(srcScroll.GetDocs()) == 0) {
-			//上一次要求遍历 src, 但遍历出空
-			needScrollSrc = false
-			needScrollDest = true
-		} else {
-			panic("TODO:")
+		log.Tracef("Before needScrollSrc=%t, needScrollDest=%t, lastSrcId=%s, lastDestId=%s,"+
+			"len(srcScroll.GetDocs()=%d, len(dstScroll.GetDocs())=%d,"+
+			"len(srcDocMaps)=%d,len(dstDocMaps)=%d",
+			needScrollSrc, needScrollDest, lastSrcId, lastDestId,
+			len(srcScroll.GetDocs()), len(dstScroll.GetDocs()),
+			len(srcDocMaps), len(dstDocMaps))
+
+		//计算应该继续查询哪个: src or/and dest
+		newNeedScrollSrc := false
+		newNeedScrollDest := false
+
+		if needScrollSrc && len(srcScroll.GetDocs()) == cfg.DocBufferCount {
+			newNeedScrollSrc = true
+		}
+		if needScrollDest && len(dstScroll.GetDocs()) == cfg.DocBufferCount {
+			newNeedScrollDest = true
+		}
+		needScrollSrc = newNeedScrollSrc
+		needScrollDest = newNeedScrollDest
+
+		//log.Debugf("After needScrollSrc=%t, needScrollDest=%t, lastSrcId=%s, lastDestId=%s,"+
+		//	"len(srcScroll.GetDocs()=%d, len(dstScroll.GetDocs())=%d,"+
+		//	"len(srcDocMaps)=%d,len(dstDocMaps)=%d",
+		//	needScrollSrc, needScrollDest, lastSrcId, lastDestId,
+		//	len(srcScroll.GetDocs()), len(dstScroll.GetDocs()),
+		//	len(srcDocMaps), len(dstDocMaps))
+
+		if len(srcDocMaps) > 0 && lastSrcId > lastDestId {
+			// dst 已经中已经没有更多的记录, 可以直接将所有的 src 都同步到 dst 中了,避免其中保存太多
+			addCount += len(srcDocMaps)
+			_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, dstType, srcDocMaps))
+			srcDocMaps = make(map[string]interface{})
+		}
+
+		if len(dstDocMaps) > 0 && lastSrcId < lastDestId {
+			//dstDocMaps 中还有记录,而且当前已经检测过所有比 srcId 都大的数据,之后的比较不会再更改结构,避免其中保存太多
+			deleteCount += len(dstDocMaps)
+			_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, dstType, dstDocMaps))
+			dstDocMaps = make(map[string]interface{})
 		}
 
 		//如果 src 和 dst 都遍历完毕, 才退出
-		log.Debugf("lastSrcId=%s, lastDestId=%s, "+
-			"needScrollSrc=%t, len(srcScroll.GetDocs()=%d, "+
-			"needScrollDest=%t, len(dstScroll.GetDocs())=%d",
-			lastSrcId, lastDestId,
-			needScrollSrc, len(srcScroll.GetDocs()),
-			needScrollDest, len(dstScroll.GetDocs()))
-
-		if (!needScrollSrc || (len(srcScroll.GetDocs()) == 0 || len(srcScroll.GetDocs()) < cfg.DocBufferCount)) &&
-			(!needScrollDest || (len(dstScroll.GetDocs()) == 0 || len(dstScroll.GetDocs()) < cfg.DocBufferCount)) {
-			log.Debugf("can not find more, will quit, and index %d, delete %d", len(srcDocMaps), len(dstDocMaps))
+		if !needScrollSrc && !needScrollDest {
+			log.Infof("can not find more, will quit, and index %d, delete %d", len(srcDocMaps), len(dstDocMaps))
 
 			if len(srcDocMaps) > 0 {
 				addCount += len(srcDocMaps)
 				_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, dstType, srcDocMaps))
+				srcDocMaps = make(map[string]interface{})
 			}
 			if len(dstDocMaps) > 0 {
 				//最后在 dst 中还有遗留的,表示 dst 中多的.需要删除
 				deleteCount += len(dstDocMaps)
 				_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, dstType, dstDocMaps))
+				dstDocMaps = make(map[string]interface{})
 			}
 			break
 		}
@@ -572,8 +597,8 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 	//dstBar.FinishPrint("Dest End")
 	//pool.Stop()
 
-	log.Infof("sync %s(%d) to %s(%d), add=%d, update=%d, delete=%d",
-		cfg.SourceIndexNames, srcRecordIndex, cfg.TargetIndexName, dstRecordIndex,
+	log.Infof("sync %s(%d/%d) to %s(%d), add=%d, update=%d, delete=%d",
+		cfg.SourceIndexNames, srcRecordIndex, srcTotalCount, cfg.TargetIndexName, dstRecordIndex,
 		addCount, updateCount, deleteCount)
 
 	//log.Infof("diffDocMaps=%+v", diffDocMaps)
