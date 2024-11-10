@@ -2,19 +2,19 @@ package main
 
 import (
 	"bufio"
-	"github.com/cheggaaa/pb"
-	log "github.com/cihub/seelog"
-	goflags "github.com/jessevdk/go-flags"
-	"github.com/mattn/go-isatty"
 	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"runtime"
 	_ "runtime/pprof"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/cheggaaa/pb"
+	log "github.com/cihub/seelog"
+	goflags "github.com/jessevdk/go-flags"
+	"github.com/mattn/go-isatty"
 )
 
 func main() {
@@ -42,9 +42,8 @@ func main() {
 	migrator.Config = c
 
 	// parse args
-	_, err = goflags.Parse(c)
+	_, err = VerifyWithResultEx(goflags.Parse(c))
 	if err != nil {
-		log.Error(err)
 		return
 	}
 
@@ -79,20 +78,33 @@ func main() {
 			log.Error("migration sync only support source 1 index to 1 target index")
 			return
 		}
-		if len(c.SrcSortField) == 0 || len(c.DstSortField) == 0 {
-			log.Error("migration sync need set sort for both source and dest index")
-			return
-		}
-		log.Infof("src sort id=%s, dest sort id=%s", c.SrcSortField, c.DstSortField)
 
-		migrator.SourceESAPI = migrator.ParseEsApi(true, c.SourceEs, c.SourceEsAuthStr, c.SourceProxy, c.Compress)
+		migrator.SourceESAPI = ParseEsApi(true, c.SourceEs, c.SourceEsAuthStr, c.SourceProxy, c.Compress)
 		if migrator.SourceESAPI == nil {
 			log.Error("can not parse source es api")
 			return
 		}
-		migrator.TargetESAPI = migrator.ParseEsApi(false, c.TargetEs, c.TargetEsAuthStr, c.TargetProxy, false)
+		migrator.TargetESAPI = ParseEsApi(false, c.TargetEs, c.TargetEsAuthStr, c.TargetProxy, false)
 		if migrator.TargetESAPI == nil {
 			log.Error("can not parse target es api")
+			return
+		}
+
+		// 检查设置缺省的 sort Id,
+		if len(c.SrcSortField) == 0 {
+			c.SrcSortField = migrator.SourceESAPI.GetDefaultSortId()
+		}
+		if len(c.DstSortField) == 0 {
+			c.DstSortField = migrator.TargetESAPI.GetDefaultSortId()
+		}
+
+		log.Infof("src sort id=%s, dest sort id=%s", c.SrcSortField, c.DstSortField)
+
+		_, indexCount, sourceIndexMappings, err := migrator.SourceESAPI.GetIndexMappings(c.CopyAllIndexes, c.SourceIndexNames)
+		sourceIndexRefreshSettings := map[string]interface{}{}
+		err = copyIndexSettings(c, migrator, indexCount, sourceIndexRefreshSettings, sourceIndexMappings)
+		if err != nil {
+			log.Error(err)
 			return
 		}
 		migrator.SyncBetweenIndex(migrator.SourceESAPI, migrator.TargetESAPI, c)
@@ -129,7 +141,7 @@ func main() {
 			if len(c.SourceEs) > 0 {
 				//dealing with basic auth
 
-				migrator.SourceESAPI = migrator.ParseEsApi(true, c.SourceEs, c.SourceEsAuthStr,
+				migrator.SourceESAPI = ParseEsApi(true, c.SourceEs, c.SourceEsAuthStr,
 					migrator.Config.SourceProxy, c.Compress)
 				if migrator.SourceESAPI == nil {
 					log.Error("can not parse source es api")
@@ -233,14 +245,9 @@ func main() {
 
 			//dealing with output
 			if len(c.TargetEs) > 0 {
-				if len(c.TargetEsAuthStr) > 0 && strings.Contains(c.TargetEsAuthStr, ":") {
-					authArray := strings.Split(c.TargetEsAuthStr, ":")
-					auth := Auth{User: authArray[0], Pass: authArray[1]}
-					migrator.TargetAuth = &auth
-				}
 
 				//get target es api
-				migrator.TargetESAPI = migrator.ParseEsApi(false, c.TargetEs, c.TargetEsAuthStr,
+				migrator.TargetESAPI = ParseEsApi(false, c.TargetEs, c.TargetEsAuthStr,
 					migrator.Config.TargetProxy, false)
 				if migrator.TargetESAPI == nil {
 					log.Error("can not parse target es api")
@@ -298,125 +305,10 @@ func main() {
 						//override indexnames to be copy
 						c.SourceIndexNames = indexNames
 
-						// copy index settings if user asked
-						if c.CopyIndexSettings || c.ShardsCount > 0 {
-							log.Info("start settings/mappings migration..")
-
-							//get source index settings
-							var sourceIndexSettings *Indexes
-							sourceIndexSettings, err := migrator.SourceESAPI.GetIndexSettings(c.SourceIndexNames)
-							log.Debug("source index settings:", sourceIndexSettings)
-							if err != nil {
-								log.Error(err)
-								return
-							}
-
-							//get target index settings
-							targetIndexSettings, err := migrator.TargetESAPI.GetIndexSettings(c.TargetIndexName)
-							if err != nil {
-								//ignore target es settings error
-								log.Debug(err)
-							}
-							log.Debug("target IndexSettings", targetIndexSettings)
-
-							//if there is only one index and we specify the dest indexname
-							if c.SourceIndexNames != c.TargetIndexName && (len(c.TargetIndexName) > 0) && indexCount == 1 {
-								log.Debugf("only one index,so we can rewrite indexname, src:%v, dest:%v ,indexCount:%d", c.SourceIndexNames, c.TargetIndexName, indexCount)
-								(*sourceIndexSettings)[c.TargetIndexName] = (*sourceIndexSettings)[c.SourceIndexNames]
-								delete(*sourceIndexSettings, c.SourceIndexNames)
-								log.Debug(sourceIndexSettings)
-							}
-
-							// dealing with indices settings
-							for name, idx := range *sourceIndexSettings {
-								log.Debug("dealing with index,name:", name, ",settings:", idx)
-								tempIndexSettings := getEmptyIndexSettings()
-
-								targetIndexExist := false
-								//if target index settings is exist and we don't copy settings, we use target settings
-								if targetIndexSettings != nil {
-									//if target es have this index and we dont copy index settings
-									if val, ok := (*targetIndexSettings)[name]; ok {
-										targetIndexExist = true
-										tempIndexSettings = val.(map[string]interface{})
-									}
-
-									if c.RecreateIndex {
-										migrator.TargetESAPI.DeleteIndex(name)
-										targetIndexExist = false
-									}
-								}
-
-								//copy index settings
-								if c.CopyIndexSettings {
-									tempIndexSettings = ((*sourceIndexSettings)[name]).(map[string]interface{})
-								}
-
-								//check map elements
-								if _, ok := tempIndexSettings["settings"]; !ok {
-									tempIndexSettings["settings"] = map[string]interface{}{}
-								}
-
-								if _, ok := tempIndexSettings["settings"].(map[string]interface{})["index"]; !ok {
-									tempIndexSettings["settings"].(map[string]interface{})["index"] = map[string]interface{}{}
-								}
-
-								sourceIndexRefreshSettings[name] = ((*sourceIndexSettings)[name].(map[string]interface{}))["settings"].(map[string]interface{})["index"].(map[string]interface{})["refresh_interval"]
-
-								//set refresh_interval
-								tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["refresh_interval"] = -1
-								tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_replicas"] = 0
-
-								//clean up settings
-								delete(tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{}), "number_of_shards")
-
-								//copy indexsettings and mappings
-								if targetIndexExist {
-									log.Debug("update index with settings,", name, tempIndexSettings)
-									//override shard settings
-									if c.ShardsCount > 0 {
-										tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_shards"] = c.ShardsCount
-									}
-									err := migrator.TargetESAPI.UpdateIndexSettings(name, tempIndexSettings)
-									if err != nil {
-										log.Error(err)
-									}
-								} else {
-
-									//override shard settings
-									if c.ShardsCount > 0 {
-										tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_shards"] = c.ShardsCount
-									}
-
-									log.Debug("create index with settings,", name, tempIndexSettings)
-									err := migrator.TargetESAPI.CreateIndex(name, tempIndexSettings)
-									if err != nil {
-										log.Error(err)
-									}
-
-								}
-
-							}
-
-							if c.CopyIndexMappings {
-
-								//if there is only one index and we specify the dest indexname
-								if c.SourceIndexNames != c.TargetIndexName && (len(c.TargetIndexName) > 0) && indexCount == 1 {
-									log.Debugf("only one index,so we can rewrite indexname, src:%v, dest:%v ,indexCount:%d", c.SourceIndexNames, c.TargetIndexName, indexCount)
-									(*sourceIndexMappings)[c.TargetIndexName] = (*sourceIndexMappings)[c.SourceIndexNames]
-									delete(*sourceIndexMappings, c.SourceIndexNames)
-									log.Debug(sourceIndexMappings)
-								}
-
-								for name, mapping := range *sourceIndexMappings {
-									err := migrator.TargetESAPI.UpdateIndexMapping(name, mapping.(map[string]interface{})["mappings"].(map[string]interface{}))
-									if err != nil {
-										log.Error(err)
-									}
-								}
-							}
-
-							log.Info("settings/mappings migration finished.")
+						err = copyIndexSettings(c, migrator, indexCount, sourceIndexRefreshSettings, sourceIndexMappings)
+						if err != nil {
+							log.Error(err)
+							return
 						}
 
 					} else {
@@ -464,4 +356,130 @@ func main() {
 	}
 
 	log.Info("data migration finished.")
+}
+
+func copyIndexSettings(c *Config,
+	migrator Migrator,
+	indexCount int,
+	sourceIndexRefreshSettings map[string]interface{},
+	sourceIndexMappings *Indexes) (err error) {
+	// copy index settings if user asked
+	if c.CopyIndexSettings || c.ShardsCount > 0 {
+		log.Info("start settings/mappings migration..")
+
+		//get source index settings
+		var sourceIndexSettings *Indexes
+		sourceIndexSettings, err = migrator.SourceESAPI.GetIndexSettings(c.SourceIndexNames)
+		log.Info("source index settings:", sourceIndexSettings)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+
+		//get target index settings
+		var targetIndexSettings *Indexes
+		targetIndexSettings, err = migrator.TargetESAPI.GetIndexSettings(c.TargetIndexName)
+		if err != nil {
+			//ignore target es settings error
+			log.Info(err)
+		}
+		log.Info("target IndexSettings", targetIndexSettings)
+
+		//if there is only one index and we specify the dest indexname
+		if c.SourceIndexNames != c.TargetIndexName && (len(c.TargetIndexName) > 0) && indexCount == 1 {
+			log.Debugf("only one index,so we can rewrite indexname, src:%v, dest:%v ,indexCount:%d", c.SourceIndexNames, c.TargetIndexName, indexCount)
+			(*sourceIndexSettings)[c.TargetIndexName] = (*sourceIndexSettings)[c.SourceIndexNames]
+			delete(*sourceIndexSettings, c.SourceIndexNames)
+			log.Info(sourceIndexSettings)
+		}
+
+		// dealing with indices settings
+		for name, idx := range *sourceIndexSettings {
+			log.Info("dealing with index,name:", name, ",settings:", idx)
+			tempIndexSettings := getEmptyIndexSettings()
+
+			targetIndexExist := false
+			//if target index settings is exist and we don't copy settings, we use target settings
+			if targetIndexSettings != nil {
+				//if target es have this index and we dont copy index settings
+				if val, ok := (*targetIndexSettings)[name]; ok {
+					targetIndexExist = true
+					tempIndexSettings = val.(map[string]interface{})
+				}
+
+				if c.RecreateIndex {
+					migrator.TargetESAPI.DeleteIndex(name)
+					targetIndexExist = false
+				}
+			}
+
+			//copy index settings
+			if c.CopyIndexSettings {
+				tempIndexSettings = ((*sourceIndexSettings)[name]).(map[string]interface{})
+			}
+
+			//check map elements
+			if _, ok := tempIndexSettings["settings"]; !ok {
+				tempIndexSettings["settings"] = map[string]interface{}{}
+			}
+
+			if _, ok := tempIndexSettings["settings"].(map[string]interface{})["index"]; !ok {
+				tempIndexSettings["settings"].(map[string]interface{})["index"] = map[string]interface{}{}
+			}
+
+			sourceIndexRefreshSettings[name] = ((*sourceIndexSettings)[name].(map[string]interface{}))["settings"].(map[string]interface{})["index"].(map[string]interface{})["refresh_interval"]
+
+			//set refresh_interval
+			//tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["refresh_interval"] = -1
+			//tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_replicas"] = 0
+
+			//clean up settings
+			//delete(tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{}), "number_of_shards")
+
+			//copy indexsettings and mappings
+			if targetIndexExist {
+				log.Debug("update index with settings,", name, tempIndexSettings)
+				//override shard settings
+				if c.ShardsCount > 0 {
+					tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_shards"] = c.ShardsCount
+				}
+				err = migrator.TargetESAPI.UpdateIndexSettings(name, tempIndexSettings)
+				if err != nil {
+					log.Error(err)
+				}
+			} else {
+				//override shard settings
+				if c.ShardsCount > 0 {
+					tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_shards"] = c.ShardsCount
+				}
+
+				log.Debug("create index with settings,", name, tempIndexSettings)
+				err = migrator.TargetESAPI.CreateIndex(name, tempIndexSettings)
+				if err != nil {
+					log.Error(err)
+				}
+			}
+		}
+
+		if c.CopyIndexMappings {
+
+			//if there is only one index and we specify the dest indexname
+			if c.SourceIndexNames != c.TargetIndexName && (len(c.TargetIndexName) > 0) && indexCount == 1 {
+				log.Debugf("only one index,so we can rewrite indexname, src:%v, dest:%v ,indexCount:%d", c.SourceIndexNames, c.TargetIndexName, indexCount)
+				(*sourceIndexMappings)[c.TargetIndexName] = (*sourceIndexMappings)[c.SourceIndexNames]
+				delete(*sourceIndexMappings, c.SourceIndexNames)
+				log.Debug(sourceIndexMappings)
+			}
+
+			for name, mapping := range *sourceIndexMappings {
+				err = migrator.TargetESAPI.UpdateIndexMapping(name, mapping.(map[string]interface{})["mappings"].(map[string]interface{}))
+				if err != nil {
+					log.Error(err)
+				}
+			}
+		}
+
+		log.Info("settings/mappings migration finished.")
+	}
+	return
 }

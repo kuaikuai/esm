@@ -24,7 +24,7 @@ type Document struct {
 	Index   string                 `json:"_index,omitempty"`
 	Type    string                 `json:"_type,omitempty"`
 	Id      string                 `json:"_id,omitempty"`
-	source  map[string]interface{} `json:"_source,omitempty"`
+	Source  map[string]interface{} `json:"_source,omitempty"`
 	Routing string                 `json:"routing,omitempty"` //after 6, only `routing` was supported
 }
 
@@ -68,16 +68,18 @@ type ClusterVersion struct {
 	ClusterName string `json:"cluster_name,omitempty"`
 	Version     struct {
 		Number        string `json:"number,omitempty"`
+		BuildDate     string `json:"build_date,omitempty"`
 		LuceneVersion string `json:"lucene_version,omitempty"`
 	} `json:"version,omitempty"`
 }
 
 type ClusterHealth struct {
-	Name   string `json:"cluster_name,omitempty"`
-	Status string `json:"status,omitempty"`
+	Name          string `json:"cluster_name,omitempty"`
+	Status        string `json:"status,omitempty"` // 集群状态: green/yellow/red
+	TimedOut      bool   `json:"timed_out,omitempty"`
+	NumberOfNodes int    `json:"number_of_nodes,omitempty"`
 }
 
-// {"took":23,"errors":true,"items":[{"create":{"_index":"mybank3","_type":"my_doc2","_id":"AWz8rlgUkzP-cujdA_Fv","status":409,"error":{"type":"version_conflict_engine_exception","reason":"[AWz8rlgUkzP-cujdA_Fv]: version conflict, document already exists (current version [1])","index_uuid":"w9JZbJkfSEWBI-uluWorgw","shard":"0","index":"mybank3"}}},{"create":{"_index":"mybank3","_type":"my_doc4","_id":"AWz8rpF2kzP-cujdA_Fx","status":400,"error":{"type":"illegal_argument_exception","reason":"Rejecting mapping update to [mybank3] as the final mapping would have more than 1 type: [my_doc2, my_doc4]"}}},{"create":{"_index":"mybank3","_type":"my_doc1","_id":"AWz8rjpJkzP-cujdA_Fu","status":400,"error":{"type":"illegal_argument_exception","reason":"Rejecting mapping update to [mybank3] as the final mapping would have more than 1 type: [my_doc2, my_doc1]"}}},{"create":{"_index":"mybank3","_type":"my_doc3","_id":"AWz8rnbckzP-cujdA_Fw","status":400,"error":{"type":"illegal_argument_exception","reason":"Rejecting mapping update to [mybank3] as the final mapping would have more than 1 type: [my_doc2, my_doc3]"}}},{"create":{"_index":"mybank3","_type":"my_doc5","_id":"AWz8rrsEkzP-cujdA_Fy","status":400,"error":{"type":"illegal_argument_exception","reason":"Rejecting mapping update to [mybank3] as the final mapping would have more than 1 type: [my_doc2, my_doc5]"}}},{"create":{"_index":"mybank3","_type":"doc","_id":"3","status":400,"error":{"type":"illegal_argument_exception","reason":"Rejecting mapping update to [mybank3] as the final mapping would have more than 1 type: [my_doc2, doc]"}}}]}
 type BulkResponse struct {
 	Took   int                 `json:"took,omitempty"`
 	Errors bool                `json:"errors,omitempty"`
@@ -97,8 +99,6 @@ type Migrator struct {
 	DocChan     chan map[string]interface{}
 	SourceESAPI ESAPI
 	TargetESAPI ESAPI
-	SourceAuth  *Auth
-	TargetAuth  *Auth
 	Config      *Config
 }
 
@@ -107,8 +107,8 @@ type Config struct {
 	// config options
 	SourceEs            string `short:"s" long:"source"  description:"source elasticsearch instance, ie: http://localhost:9200"`
 	Query               string `short:"q" long:"query"  description:"query against source elasticsearch instance, filter data before migrate, ie: name:medcl"`
-	SrcSortField        string `long:"ssort" description:"source sort field when scroll, ie: _id" default:"_id"`
-	DstSortField        string `long:"dsort" description:"dest sort field when scroll, ie: _id" default:"_id"`
+	SrcSortField        string `long:"ssort" description:"source sort field when scroll, ie: _id or _uid(es5)" default:""`
+	DstSortField        string `long:"dsort" description:"dest sort field when scroll, ie: _id or _uid(es5)" default:""`
 	TargetEs            string `short:"d" long:"dest"    description:"destination elasticsearch instance, ie: http://localhost:9201"`
 	SourceEsAuthStr     string `short:"m" long:"source_auth"  description:"basic auth of source elasticsearch instance, ie: user:pass"`
 	TargetEsAuthStr     string `short:"n" long:"dest_auth"  description:"basic auth of target elasticsearch instance, ie: user:pass"`

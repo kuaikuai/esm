@@ -20,13 +20,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/cheggaaa/pb"
-	"io"
-	"io/ioutil"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cheggaaa/pb"
 
 	log "github.com/cihub/seelog"
 )
@@ -59,98 +58,6 @@ func (m *Migrator) recoveryIndexSettings(sourceIndexRefreshSettings map[string]i
 		if m.Config.Refresh {
 			m.TargetESAPI.Refresh(name)
 		}
-	}
-}
-
-func (m *Migrator) ClusterVersion(host string, auth *Auth, proxy string) (*ClusterVersion, []error) {
-
-	url := fmt.Sprintf("%s", host)
-	resp, body, errs := Get(url, auth, proxy)
-
-	if resp != nil && resp.Body != nil {
-		io.Copy(ioutil.Discard, resp.Body)
-		defer resp.Body.Close()
-	}
-
-	if errs != nil {
-		log.Error(errs)
-		return nil, errs
-	}
-
-	log.Debug(body)
-
-	version := &ClusterVersion{}
-	err := json.Unmarshal([]byte(body), version)
-
-	if err != nil {
-		log.Error(body, errs)
-		return nil, errs
-	}
-	return version, nil
-}
-
-func (m *Migrator) ParseEsApi(isSource bool, host string, authStr string, proxy string, compress bool) ESAPI {
-	var auth *Auth = nil
-	if len(authStr) > 0 && strings.Contains(authStr, ":") {
-		authArray := strings.Split(authStr, ":")
-		auth = &Auth{User: authArray[0], Pass: authArray[1]}
-		if isSource {
-			m.SourceAuth = auth
-		} else {
-			m.TargetAuth = auth
-		}
-	}
-
-	esVersion, errs := m.ClusterVersion(host, auth, proxy)
-	if errs != nil {
-		return nil
-	}
-
-	esInfo := "dest"
-	if isSource {
-		esInfo = "source"
-	}
-
-	log.Infof("%s es version: %s", esInfo, esVersion.Version.Number)
-	if strings.HasPrefix(esVersion.Version.Number, "7.") {
-		log.Debug("es is V7,", esVersion.Version.Number)
-		api := new(ESAPIV7)
-		api.Host = host
-		api.Compress = compress
-		api.Auth = auth
-		api.HttpProxy = proxy
-		api.Version = esVersion
-		return api
-		//migrator.SourceESAPI = api
-	} else if strings.HasPrefix(esVersion.Version.Number, "6.") {
-		log.Debug("es is V6,", esVersion.Version.Number)
-		api := new(ESAPIV6)
-		api.Host = host
-		api.Compress = compress
-		api.Auth = auth
-		api.HttpProxy = proxy
-		api.Version = esVersion
-		return api
-		//migrator.SourceESAPI = api
-	} else if strings.HasPrefix(esVersion.Version.Number, "5.") {
-		log.Debug("es is V5,", esVersion.Version.Number)
-		api := new(ESAPIV5)
-		api.Host = host
-		api.Compress = compress
-		api.Auth = auth
-		api.HttpProxy = proxy
-		api.Version = esVersion
-		return api
-		//migrator.SourceESAPI = api
-	} else {
-		log.Debug("es is not V5,", esVersion.Version.Number)
-		api := new(ESAPIV0)
-		api.Host = host
-		api.Compress = compress
-		api.Auth = auth
-		api.HttpProxy = proxy
-		api.Version = esVersion
-		return api
 	}
 }
 
@@ -232,7 +139,7 @@ READ_DOCS:
 			doc := Document{
 				Index:  tempDestIndexName,
 				Type:   tempTargetTypeName,
-				source: docI["_source"].(map[string]interface{}),
+				Source: docI["_source"].(map[string]interface{}),
 				Id:     docI["_id"].(string),
 			}
 
@@ -247,11 +154,11 @@ READ_DOCS:
 					oldField := strings.TrimSpace(fvs[0])
 					newField := strings.TrimSpace(fvs[1])
 					if oldField == "_type" {
-						doc.source[newField] = docI["_type"].(string)
+						doc.Source[newField] = docI["_type"].(string)
 					} else {
-						v := doc.source[oldField]
-						doc.source[newField] = v
-						delete(doc.source, oldField)
+						v := doc.Source[oldField]
+						doc.Source[newField] = v
+						delete(doc.Source, oldField)
 					}
 				}
 			}
@@ -282,7 +189,7 @@ READ_DOCS:
 			if err = docEnc.Encode(post); err != nil {
 				log.Error(err)
 			}
-			if err = docEnc.Encode(doc.source); err != nil {
+			if err = docEnc.Encode(doc.Source); err != nil {
 				log.Error(err)
 			}
 
@@ -355,7 +262,7 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 
 		switch bulkOp {
 		case opIndex:
-			doc.source = docI // docI["_source"].(map[string]interface{}),
+			doc.Source = docI // docI["_source"].(map[string]interface{}),
 			strOperation = "index"
 		case opDelete:
 			strOperation = "delete"
@@ -369,7 +276,7 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 		}
 		_ = Verify(docEnc.Encode(post))
 		if bulkOp == opIndex {
-			_ = Verify(docEnc.Encode(doc.source))
+			_ = Verify(docEnc.Encode(doc.Source))
 		}
 		// append the doc to the main buffer
 		mainBuf.Write(docBuf.Bytes())
@@ -569,7 +476,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 
 		//如果 src 和 dst 都遍历完毕, 才退出
 		if !needScrollSrc && !needScrollDest {
-			log.Infof("can not find more, will quit, and index %d, delete %d", len(srcDocMaps), len(dstDocMaps))
+			log.Infof("can not find more, will quit, remain index %d, delete %d", len(srcDocMaps), len(dstDocMaps))
 
 			if len(srcDocMaps) > 0 {
 				addCount += len(srcDocMaps)
@@ -582,6 +489,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 				_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, dstType, dstDocMaps))
 				dstDocMaps = make(map[string]interface{})
 			}
+
 			break
 		}
 

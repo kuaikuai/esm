@@ -1,0 +1,62 @@
+########################################################################################################################
+# 针对 ESM Sync 的测试环境(注意: services 下的配置没有测试过, 只测试了命令行方式 )
+#
+# TODO:
+#   1.docker run -ti --rm -p 9200:9200 -e cluster.name=src_cluster --name es_src elasticsearch:5.6.4
+#       https://download.elastic.co/demos/kibana/gettingstarted/accounts.zip  <== 下载并导入初始测试数据
+#       curl -H "Content-Type: application/json" -X POST "localhost:9200/bank/account/_bulk?pretty" --data-binary  @accounts.json
+#   2.docker run -ti --rm --privileged --name es_dst
+#       -e discovery.type=single-node -e discovery.seed_hosts=127.0.0.1 -e cluster.name=dst_cluster -p 9201:9200
+#       elasticsearch:7.17.0 bash -c "ulimit -l unlimited && sysctl -w vm.max_map_count=262144 && /usr/local/bin/docker-entrypoint.sh"
+#      <== 要求是 7.15.1 ,但实测没有这个版本的镜像
+#   3.同步数据
+#     esm --sync --sort="account_number" -s http://127.0.0.1:9200 -x bank -d http://127.0.0.1:9201 -y bank -u "_doc"
+#     esm --sync --sort="account_number" -s http://192.168.100.66:9200 -x bank_linux -d http://192.168.100.66:9201 -y bank -u "_doc"
+#
+#     esm --sync -c 10 -u "_doc"
+#       --ssort="_uid" -s http://127.0.0.1:9200 -x bank --dsort="_id"  -d http://127.0.0.1:9201 -y bank
+#       --source_proxy=http://127.0.0.1:8888 --dest_proxy=http://127.0.0.1:8888
+
+#   4.导出数据并比较
+#     esm -s http://localhost:9200 -x bank --truncate_output -o=src.json
+#     esm -s http://localhost:9201 -x bank --truncate_output -o=dst.json --skip=_type
+#     diff -W 200 -ry --suppress-common-lines src.json dst.json
+
+# esm --ssort=_uid -s http://localhost:9200 -x bank --truncate_output --skip=_type,sort -o=src.json --source_proxy=http://127.0.0.1:8888 --dest_proxy=http://127.0.0.1:8888
+# esm --ssort=id    -s http://localhost:9201 -x bank --truncate_output --skip=_type,sort -o=dst.json --source_proxy=http://127.0.0.1:8888 --dest_proxy=http://127.0.0.1:8888
+
+# 数据操作:
+#    curl -X DELETE http://127.0.0.1:9200/bank/account/777
+#    curl -X DELETE http://127.0.0.1:9201/bank/_doc/123
+#    curl -H "Content-Type: application/json" -X POST http://127.0.0.1:9201/bank/_doc/1111 
+#      -d "{\"account_number\":1111,\"balance\":39225,\"firstname\":\"fish\",\"lastname\":\"jam\",\"age\":45,\"gender\":\"M\",\"address\":\"TianFu\",\"employer\":\"Naver\",\"email\":\"fishjam@163.com\",\"city\":\"Chengdu\",\"state\":\"SC\"}"
+########################################################################################################################
+
+version: '3'
+
+services:
+  es_src:
+    image: elasticsearch:5.6.4
+    container_name: es_src_01
+    hostname: es_src_01
+    environment:
+      - cluster.name=es_src
+      - node.name=es_src_01
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m -XX:+HeapDumpOnOutOfMemoryError
+      - network.host=0.0.0.0
+      #- http.port=9201
+      #- transport.tcp.port=9301
+      - discovery.type=single-node
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9201:9200
+      - 9301:9300
+    networks:
+      - es_src
+
+networks:
+  es_src:
+    driver: bridge

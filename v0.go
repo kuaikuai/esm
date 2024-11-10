@@ -21,11 +21,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	log "github.com/cihub/seelog"
 	"io"
 	"io/ioutil"
 	"regexp"
 	"strings"
+
+	log "github.com/cihub/seelog"
 )
 
 type ESAPIV0 struct {
@@ -50,8 +51,8 @@ func (s *ESAPIV0) ClusterHealth() *ClusterHealth {
 		return &ClusterHealth{Name: s.Host, Status: "unreachable"}
 	}
 
-	log.Debug(url)
-	log.Debug(body)
+	log.Debugf("url=%s", url)
+	log.Debugf("body=%s", body)
 
 	health := &ClusterHealth{}
 	err := json.Unmarshal([]byte(body), health)
@@ -65,6 +66,10 @@ func (s *ESAPIV0) ClusterHealth() *ClusterHealth {
 
 func (s *ESAPIV0) ClusterVersion() *ClusterVersion {
 	return s.Version
+}
+
+func (s *ESAPIV0) GetDefaultSortId() string {
+	return "_id"
 }
 
 func (s *ESAPIV0) Bulk(data *bytes.Buffer) error {

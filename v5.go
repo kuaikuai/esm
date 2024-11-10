@@ -20,12 +20,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	log "github.com/cihub/seelog"
 	"strings"
+
+	log "github.com/cihub/seelog"
 )
 
 type ESAPIV5 struct {
 	ESAPIV0
+}
+
+func (s *ESAPIV5) GetDefaultSortId() string {
+	return "_uid"
 }
 
 func (s *ESAPIV5) NewScroll(indexNames string, scrollTime string, docBufferCount int, query string, sort string,

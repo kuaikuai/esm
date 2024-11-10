@@ -1,0 +1,79 @@
+########################################################################################################################
+#
+########################################################################################################################
+
+version: '3'
+services:
+
+  es_dst_01:
+    image: elasticsearch:7.17.0
+    container_name: es_dst_01
+    hostname: es_dst_01
+    environment:
+      - cluster.name=es_dst
+      - node.name=es_dst_01
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m -XX:+HeapDumpOnOutOfMemoryError
+      - network.host=0.0.0.0
+      - http.port=19201
+      - transport.tcp.port=19301
+      - discovery.seed_hosts=es_dst_01:19301,es_dst_02:19302,es_dst_03:19303
+      - cluster.initial_master_nodes=es_dst_01,es_dst_02,es_dst_03
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 19201:19201
+      - 19301:19301
+    networks:
+      - es_dst
+
+  es_dst_02:
+    image: elasticsearch:7.17.0
+    container_name: es_dst_02
+    hostname: es_dst_02
+    environment:
+      - cluster.name=es_dst
+      - node.name=es_dst_02
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m -XX:+HeapDumpOnOutOfMemoryError
+      - network.host=0.0.0.0
+      - http.port=19202
+      - transport.tcp.port=19302
+      - discovery.seed_hosts=es_dst_01:19301,es_dst_02:19302,es_dst_03:19303
+      - cluster.initial_master_nodes=es_dst_01,es_dst_02,es_dst_03
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 19202:19202
+      - 19302:19302
+    networks:
+      - es_dst
+
+  es_dst_03:
+    image: elasticsearch:7.17.0
+    container_name: es_dst_03
+    hostname: es_dst_03
+    environment:
+      - cluster.name=es_dst
+      - node.name=es_dst_03
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m -XX:+HeapDumpOnOutOfMemoryError
+      - network.host=0.0.0.0
+      - http.port=19203
+      - transport.tcp.port=19303
+      - discovery.seed_hosts=es_dst_01:19301,es_dst_02:19302,es_dst_03:19303
+      - cluster.initial_master_nodes=es_dst_01,es_dst_02,es_dst_03
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 19203:19203
+      - 19303:19303
+    networks:
+      - es_dst
+
+networks:
+  es_dst:
+    driver: bridge

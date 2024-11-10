@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	log "github.com/cihub/seelog"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
+
+	log "github.com/cihub/seelog"
 )
 
 type CheckErrorAction int
@@ -55,14 +56,21 @@ func checkAndHandleError(err error, msg string, action CheckErrorAction, skip in
 
 func Verify(err error) error {
 	if err != nil {
-		checkAndHandleError(err, err.Error(), verifyAction, 3)
+		checkAndHandleError(err, "", verifyAction, 3)
 	}
 	return err
 }
 
 func VerifyWithResult[T any](result T, err error) T {
 	if err != nil {
-		checkAndHandleError(err, err.Error(), verifyAction, 3)
+		checkAndHandleError(err, "", verifyAction, 3)
 	}
 	return result
+}
+
+func VerifyWithResultEx[T any](result T, err error) (T, error) {
+	if err != nil {
+		checkAndHandleError(err, "", verifyAction, 3)
+	}
+	return result, err
 }

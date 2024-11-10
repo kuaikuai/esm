@@ -1,0 +1,78 @@
+########################################################################################################################
+#
+########################################################################################################################
+
+version: '3'
+services:
+  es_src_01:
+    image: elasticsearch:7.17.0
+    container_name: es_src_01
+    hostname: es_src_01
+    environment:
+      - cluster.name=es_src
+      - node.name=es_src_01
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m -XX:+HeapDumpOnOutOfMemoryError
+      - network.host=0.0.0.0
+      - http.port=9201
+      - transport.tcp.port=9301
+      - discovery.seed_hosts=es_src_01:9301,es_src_02:9302,es_src_03:9303
+      - cluster.initial_master_nodes=es_src_01,es_src_02,es_src_03
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9201:9201
+      - 9301:9301
+    networks:
+      - es_src
+
+  es_src_02:
+    image: elasticsearch:7.17.0
+    container_name: es_src_02
+    hostname: es_src_02
+    environment:
+      - cluster.name=es_src
+      - node.name=es_src_02
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m -XX:+HeapDumpOnOutOfMemoryError
+      - network.host=0.0.0.0
+      - http.port=9202
+      - transport.tcp.port=9302
+      - discovery.seed_hosts=es_src_01:9301,es_src_02:9302,es_src_03:9303
+      - cluster.initial_master_nodes=es_src_01,es_src_02,es_src_03
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9202:9202
+      - 9302:9302
+    networks:
+      - es_src
+
+  es_src_03:
+    image: elasticsearch:7.17.0
+    container_name: es_src_03
+    hostname: es_src_03
+    environment:
+      - cluster.name=es_src
+      - node.name=es_src_03
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m -XX:+HeapDumpOnOutOfMemoryError
+      - network.host=0.0.0.0
+      - http.port=9203
+      - transport.tcp.port=9303
+      - discovery.seed_hosts=es_src_01:9301,es_src_02:9302,es_src_03:9303
+      - cluster.initial_master_nodes=es_src_01,es_src_02,es_src_03
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9203:9203
+      - 9303:9303
+    networks:
+      - es_src
+
+networks:
+  es_src:
+    driver: bridge
