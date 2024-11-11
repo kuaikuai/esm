@@ -21,16 +21,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	log "github.com/cihub/seelog"
 	"io"
 	"io/ioutil"
 	"regexp"
 	"strings"
+
+	log "github.com/cihub/seelog"
 	//"infini.sh/framework/core/util"
 )
 
 type ESAPIV6 struct {
 	ESAPIV5
+}
+
+func (s *ESAPIV6) GetDefaultSortId() string {
+	return "_id"
 }
 
 func (s *ESAPIV6) NewScroll(indexNames string, scrollTime string, docBufferCount int, query string, sort string,

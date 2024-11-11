@@ -75,5 +75,36 @@ func indexSettings(t *testing.T, srcEsApi ESAPI, dstEsApi ESAPI) {
 }
 
 func scroll(t *testing.T, srcEsApi ESAPI, dstEsApi ESAPI) {
-	//srcEsApi.NewScroll(srcIndexName)
+	var scrollApi ScrollAPI
+	var err error
+	totalDocs := 0
+	iterIndex := 0
+	scrollApi, err = VerifyWithResultEx(srcEsApi.NewScroll(srcIndexName,
+		"10m", 33, `lastname:['B' TO 'C']`,
+		"_uid", 0, 1, ""))
+
+	assert.NoError(t, err)
+	log.Infof("hitsTotal=%d, scrollId=%s, len(docs)=%d",
+		scrollApi.GetHitsTotal(), scrollApi.GetScrollId(), len(scrollApi.GetDocs()))
+	for {
+		iterIndex++
+		totalDocs += len(scrollApi.GetDocs())
+
+		log.Infof("iterIndex=%d, totalDocs=%d, hitsTotal=%d, len(docs)=%d",
+			iterIndex, totalDocs, scrollApi.GetHitsTotal(), len(scrollApi.GetDocs()))
+
+		scrollApi, err = VerifyWithResultEx(srcEsApi.NextScroll("10m", scrollApi.GetScrollId()))
+		if err != nil {
+			// 全部结束, 可以删除
+			_ = Verify(srcEsApi.DeleteScroll(scrollApi.GetScrollId()))
+			break
+		}
+
+		if scrollApi.GetDocs() == nil || len(scrollApi.GetDocs()) == 0 {
+			_ = Verify(srcEsApi.DeleteScroll(scrollApi.GetScrollId()))
+			break
+		}
+	}
+
+	log.Infof("total documents is %d", totalDocs)
 }

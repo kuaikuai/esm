@@ -32,6 +32,7 @@
   - es5 to es7
   ```shell
     ..\esm --sync --ssort=account_number -c 10000 -v debug -s http://127.0.0.1:9201 -x account -d http://127.0.0.1:19201 -y account -u "_doc"
+       --source_proxy=http://localhost:8888 --dest_proxy=http://localhost:8888
   ```  
 
   - es7 to es7

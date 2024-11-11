@@ -24,7 +24,7 @@ type Document struct {
 	Index   string                 `json:"_index,omitempty"`
 	Type    string                 `json:"_type,omitempty"`
 	Id      string                 `json:"_id,omitempty"`
-	Source  map[string]interface{} `json:"_source,omitempty"`
+	source  map[string]interface{} `json:"_source,omitempty"`
 	Routing string                 `json:"routing,omitempty"` //after 6, only `routing` was supported
 }
 

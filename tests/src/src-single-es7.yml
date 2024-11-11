@@ -1,0 +1,31 @@
+########################################################################################################################
+#
+########################################################################################################################
+
+version: '3'
+services:
+  es_src_01:
+    image: elasticsearch:7.17.0
+    container_name: es_src_01
+    hostname: es_src_01
+    environment:
+      - cluster.name=es_src
+      - node.name=es_src_01
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m -XX:+HeapDumpOnOutOfMemoryError
+      - network.host=0.0.0.0
+      - http.port=9201
+      - transport.tcp.port=9301
+      - discovery.type=single-node
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9201:9201
+      - 9301:9301
+    networks:
+      - es_src
+
+networks:
+  es_src:
+    driver: bridge
