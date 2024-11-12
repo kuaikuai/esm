@@ -1,0 +1,11 @@
+
+GET http://{{src_es_host}}:{{src_es_port}}/account/_search?size=2
+Content-Type: application/json
+
+{
+  "query": {
+    "query_string": {
+      "query": "account_number:>=990 AND balance:33298"
+    }
+  }
+}

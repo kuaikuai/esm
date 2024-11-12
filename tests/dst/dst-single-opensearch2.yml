@@ -1,18 +1,21 @@
 ########################################################################################################################
-#
+# https://opensearch.org/samples/docker-compose.yml
 ########################################################################################################################
 
 version: '3'
 services:
 
   es_dst_01:
-    image: opensearchproject/opensearch:2.2.0
+    image: opensearchproject/opensearch:2.7.0
     container_name: es_dst_01
     hostname: es_dst_01
     environment:
       - cluster.name=es_dst
       - node.name=es_dst_01
       - ES_JAVA_OPTS=-Xms256m -Xmx256m -XX:+HeapDumpOnOutOfMemoryError
+      - bootstrap.memory_lock=true  # along with the memlock settings below, disables swapping
+      - plugins.security.disabled=false
+      - plugins.security.ssl.http.enabled=false
       - network.host=0.0.0.0
       - http.port=19201
       - transport.tcp.port=19301
@@ -24,6 +27,7 @@ services:
     ports:
       - 19201:19201
       - 19301:19301
+      - 19601:19601
     networks:
       - es_dst
 

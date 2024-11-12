@@ -107,6 +107,7 @@ type Config struct {
 	// config options
 	SourceEs            string `short:"s" long:"source"  description:"source elasticsearch instance, ie: http://localhost:9200"`
 	Query               string `short:"q" long:"query"  description:"query against source elasticsearch instance, filter data before migrate, ie: name:medcl"`
+	StampValue          string `long:"stamp"  description:"query with special stamp field and value, so can incremental search, ie: modifiedDate:>=1727712000000"`
 	SrcSortField        string `long:"ssort" description:"source sort field when scroll, ie: _id or _uid(es5)" default:""`
 	DstSortField        string `long:"dsort" description:"dest sort field when scroll, ie: _id or _uid(es5)" default:""`
 	TargetEs            string `short:"d" long:"dest"    description:"destination elasticsearch instance, ie: http://localhost:9201"`

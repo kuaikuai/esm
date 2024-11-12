@@ -226,6 +226,15 @@ func cleanSettings(settings map[string]interface{}) {
 	delete(settings["settings"].(map[string]interface{})["index"].(map[string]interface{}), "provided_name")
 }
 
+func (s *ESAPIV0) CanUpdateIndex(name string) bool {
+	//TODO:
+	// reason=Can't update non dynamic settings [[index.number_of_shards]] for open indices [[api_api_key/pYCRXSe5TEeJkRU0j83thw]]
+	if s.Version.Version.Number >= "7." {
+		return false
+	}
+	return true
+}
+
 func (s *ESAPIV0) UpdateIndexSettings(name string, settings map[string]interface{}) error {
 
 	log.Debug("update index: ", name, settings)
@@ -334,7 +343,7 @@ func (s *ESAPIV0) Refresh(name string) (err error) {
 	return nil
 }
 
-func (s *ESAPIV0) NewScroll(indexNames string, scrollTime string, docBufferCount int, query string, sort string,
+func (s *ESAPIV0) NewScroll(indexNames string, scrollTime string, docBufferCount int, query string, stamp string, sort string,
 	slicedId int, maxSlicedCount int, fields string) (scroll ScrollAPI, err error) {
 
 	// curl -XGET 'http://es-0.9:9200/_search?search_type=scan&scroll=10m&size=50'

@@ -292,7 +292,7 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 	return nil
 }
 
-func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config) {
+func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config) (string, error) {
 	// _id => value
 	srcDocMaps := make(map[string]interface{})
 	dstDocMaps := make(map[string]interface{})
@@ -325,10 +325,10 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 	for {
 		if srcScroll == nil {
 			srcScroll, err = srcEsApi.NewScroll(cfg.SourceIndexNames, cfg.ScrollTime, cfg.DocBufferCount, cfg.Query,
-				cfg.SrcSortField, 0, cfg.ScrollSliceSize, cfg.Fields)
+				cfg.StampValue, cfg.SrcSortField, 0, cfg.ScrollSliceSize, cfg.Fields)
 			if err != nil {
 				log.Infof("can not scroll for source index: %s, reason:%s", cfg.SourceIndexNames, err.Error())
-				return
+				return "", err
 			}
 			srcTotalCount = srcScroll.GetHitsTotal()
 			log.Infof("src total count=%d", srcTotalCount)
@@ -340,7 +340,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 
 		if dstScroll == nil {
 			dstScroll, err = dstEsApi.NewScroll(cfg.TargetIndexName, cfg.ScrollTime, cfg.DocBufferCount, cfg.Query,
-				cfg.DstSortField, 0, cfg.ScrollSliceSize, cfg.Fields)
+				cfg.StampValue, cfg.DstSortField, 0, cfg.ScrollSliceSize, cfg.Fields)
 			if err != nil {
 				log.Infof("can not scroll for dest index: %s, reason:%s", cfg.TargetIndexName, err.Error())
 				//生成一个 empty 的, 相当于直接bulk?
@@ -510,4 +510,6 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 		addCount, updateCount, deleteCount)
 
 	//log.Infof("diffDocMaps=%+v", diffDocMaps)
+
+	return "", err
 }

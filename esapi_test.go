@@ -80,8 +80,8 @@ func scroll(t *testing.T, srcEsApi ESAPI, dstEsApi ESAPI) {
 	totalDocs := 0
 	iterIndex := 0
 	scrollApi, err = VerifyWithResultEx(srcEsApi.NewScroll(srcIndexName,
-		"10m", 33, `lastname:['B' TO 'C']`,
-		"_uid", 0, 1, ""))
+		"10m", 33, `age:40`, "account_number:>=990",
+		"", 0, 1, ""))
 
 	assert.NoError(t, err)
 	log.Infof("hitsTotal=%d, scrollId=%s, len(docs)=%d",

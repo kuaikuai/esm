@@ -38,7 +38,7 @@ func (s *ESAPIV6) GetDefaultSortId() string {
 	return "_id"
 }
 
-func (s *ESAPIV6) NewScroll(indexNames string, scrollTime string, docBufferCount int, query string, sort string,
+func (s *ESAPIV6) NewScroll(indexNames string, scrollTime string, docBufferCount int, query string, stamp string, sort string,
 	slicedId int, maxSlicedCount int, fields string) (scroll ScrollAPI, err error) {
 	url := fmt.Sprintf("%s/%s/_search?scroll=%s&size=%d", s.Host, indexNames, scrollTime, docBufferCount)
 

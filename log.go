@@ -17,8 +17,9 @@ limitations under the License.
 package main
 
 import (
-	log "github.com/cihub/seelog"
 	"strings"
+
+	log "github.com/cihub/seelog"
 )
 
 func setInitLogging(logLevel string) {
@@ -30,7 +31,7 @@ func setInitLogging(logLevel string) {
 	testConfig = testConfig + logLevel
 	testConfig = testConfig + `">
 		<outputs formatid="main">
-			<filter levels="error">
+			<filter levels="trace">
 				<file path="./esm.log"/>
 			</filter>
 			<console formatid="main" />

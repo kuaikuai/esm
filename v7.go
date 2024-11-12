@@ -21,23 +21,24 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	log "github.com/cihub/seelog"
 	"io"
 	"io/ioutil"
 	"regexp"
 	"strings"
+
+	log "github.com/cihub/seelog"
 )
 
 type ESAPIV7 struct {
 	ESAPIV6
 }
 
-func (s *ESAPIV7) NewScroll(indexNames string, scrollTime string, docBufferCount int, query string, sort string,
+func (s *ESAPIV7) NewScroll(indexNames string, scrollTime string, docBufferCount int, query string, stamp string, sort string,
 	slicedId int, maxSlicedCount int, fields string) (scroll ScrollAPI, err error) {
 	url := fmt.Sprintf("%s/%s/_search?scroll=%s&size=%d", s.Host, indexNames, scrollTime, docBufferCount)
 
 	jsonBody := ""
-	if len(query) > 0 || maxSlicedCount > 0 || len(fields) > 0 {
+	if len(query) > 0 || len(stamp) > 0 || maxSlicedCount > 0 || len(fields) > 0 {
 		queryBody := map[string]interface{}{}
 
 		if len(fields) > 0 {
@@ -46,6 +47,14 @@ func (s *ESAPIV7) NewScroll(indexNames string, scrollTime string, docBufferCount
 			} else {
 				queryBody["_source"] = strings.Split(fields, ",")
 			}
+		}
+
+		if len(query) > 0 {
+			if len(stamp) > 0 {
+				query = query + " AND " + stamp
+			}
+		} else if len(stamp) > 0 {
+			query = stamp
 		}
 
 		if len(query) > 0 {

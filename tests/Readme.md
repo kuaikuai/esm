@@ -15,18 +15,17 @@
 
 - 2.src 中添加数据(TODO: 分区数)
   ```shell
-    curl -H "Content-Type: application/json" -X PUT http://localhost:9201/account -d "{\"settings\":{\"number_of_shards\":2}}"```
+    curl -H "Content-Type: application/json" -X PUT http://localhost:9201/account -d "{\"settings\":{\"number_of_shards\":2}}"
   ```
   
   - es5:
     ```shell
-      curl -H "Content-Type: application/json" -X POST "localhost:9201/account/account/_bulk?pretty" --data-binary  @"accounts.json"
+      curl -H "Content-Type: application/json" -X POST "http://localhost:9201/account/account/_bulk?pretty" --data-binary  "@tests/accounts.json"
     ```
   - es7:
     ```shell
-      curl -H "Content-Type: application/json" -X POST "localhost:9201/account/_doc/_bulk?pretty" --data-binary  @accounts.json
+      curl -H "Content-Type: application/json" -X POST "http://localhost:9201/account/_doc/_bulk?pretty" --data-binary  "@tests/accounts.json"
     ```
-
   
 - 3.使用 esm 进行同步
   - es5 to es7
@@ -43,8 +42,8 @@
   ```
   - 导出数据进行比较
   ```shell
-    esm --source=http://localhost:9201 --src_indexes=account --truncate_output --skip=_index,_type,sort --output_file=src.json
-    esm --source=http://localhost:19201 --src_indexes=account --truncate_output --skip=_index,_type,sort --output_file=dst.json
+    esm --source=http://localhost:9201 --ssort=account_number --src_indexes=account --truncate_output --skip=_index,_type,sort --output_file=src.json
+    esm --source=http://localhost:19201 --ssort=account_number --src_indexes=account --truncate_output --skip=_index,_type,sort --output_file=dst.json
     diff -W 200 -ry --suppress-common-lines src.json dst.json
   ```
    

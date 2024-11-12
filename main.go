@@ -155,8 +155,8 @@ func main() {
 				totalSize := 0
 				finishedSlice := 0
 				for slice := 0; slice < c.ScrollSliceSize; slice++ {
-					scroll, err := migrator.SourceESAPI.NewScroll(c.SourceIndexNames, c.ScrollTime, c.DocBufferCount, c.Query,
-						c.SrcSortField, slice, c.ScrollSliceSize, c.Fields)
+					scroll, err := migrator.SourceESAPI.NewScroll(c.SourceIndexNames, c.ScrollTime, c.DocBufferCount,
+						c.Query, c.StampValue, c.SrcSortField, slice, c.ScrollSliceSize, c.Fields)
 					if err != nil {
 						log.Error(err)
 						return
@@ -438,14 +438,18 @@ func copyIndexSettings(c *Config,
 
 			//copy indexsettings and mappings
 			if targetIndexExist {
-				log.Debug("update index with settings,", name, tempIndexSettings)
-				//override shard settings
-				if c.ShardsCount > 0 {
-					tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_shards"] = c.ShardsCount
-				}
-				err = migrator.TargetESAPI.UpdateIndexSettings(name, tempIndexSettings)
-				if err != nil {
-					log.Error(err)
+				if migrator.TargetESAPI.CanUpdateIndex(name) {
+					log.Debug("update index with settings,", name, tempIndexSettings)
+					//override shard settings
+					if c.ShardsCount > 0 {
+						tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_shards"] = c.ShardsCount
+					}
+					err = migrator.TargetESAPI.UpdateIndexSettings(name, tempIndexSettings)
+					if err != nil {
+						log.Error(err)
+					}
+				} else {
+					log.Warnf("can not dynamic update index %s, just ignore", name)
 				}
 			} else {
 				//override shard settings
