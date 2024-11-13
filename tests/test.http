@@ -9,3 +9,16 @@ Content-Type: application/json
     }
   }
 }
+
+###
+POST http://{{src_es_host}}:{{src_es_port}}/account/_doc/2/_update?pretty
+Content-Type: application/json
+
+{ "doc" : { "lastUpdateTime" : 1731500934000 }}
+
+
+###
+POST http://{{src_es_host}}:{{src_es_port}}/account/_search?scroll=10m&size=10000
+Content-Type: application/json
+
+{"query":{"query_string":{"query":"lastUpdateTime:>=1731496465595"}},"sort":["_id"]}

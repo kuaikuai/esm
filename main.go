@@ -370,7 +370,6 @@ func copyIndexSettings(c *Config,
 		//get source index settings
 		var sourceIndexSettings *Indexes
 		sourceIndexSettings, err = migrator.SourceESAPI.GetIndexSettings(c.SourceIndexNames)
-		log.Info("source index settings:", sourceIndexSettings)
 		if err != nil {
 			log.Error(err)
 			return err
@@ -383,7 +382,6 @@ func copyIndexSettings(c *Config,
 			//ignore target es settings error
 			log.Info(err)
 		}
-		log.Info("target IndexSettings", targetIndexSettings)
 
 		//if there is only one index and we specify the dest indexname
 		if c.SourceIndexNames != c.TargetIndexName && (len(c.TargetIndexName) > 0) && indexCount == 1 {
@@ -444,6 +442,10 @@ func copyIndexSettings(c *Config,
 					if c.ShardsCount > 0 {
 						tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_shards"] = c.ShardsCount
 					}
+
+					//log.Info("source index settings:", sourceIndexSettings)
+					//log.Info("target IndexSettings", targetIndexSettings)
+
 					err = migrator.TargetESAPI.UpdateIndexSettings(name, tempIndexSettings)
 					if err != nil {
 						log.Error(err)

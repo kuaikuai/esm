@@ -27,9 +27,24 @@ import (
 	log "github.com/cihub/seelog"
 )
 
+type MainVersion uint8
+
+const (
+	VersionUnknown MainVersion = iota //
+	ES5
+	ES6
+	ES7
+	ES8
+
+	// OpenSearch
+	OS1
+	OS2
+)
+
 type ESAPI interface {
 	ClusterHealth() *ClusterHealth
 	ClusterVersion() *ClusterVersion
+	GetMainVersion() MainVersion
 	GetDefaultSortId() string // 不同版本的 es, 默认的sort Id 不一样: es5: _uid, es6+: _id
 	Bulk(data *bytes.Buffer) error
 	GetIndexSettings(indexNames string) (*Indexes, error)
@@ -73,6 +88,20 @@ func GetClusterVersion(host string, auth *Auth, proxy string) (*ClusterVersion, 
 	return version, nil
 }
 
+func GetMainVersion(cVersion *ClusterVersion) MainVersion {
+	mainVersion := VersionUnknown
+	versionNumber := cVersion.Version.Number
+	if strings.HasPrefix(versionNumber, "7.") {
+		mainVersion = ES7
+	} else if strings.HasPrefix(versionNumber, "6.") {
+		mainVersion = ES6
+	} else if strings.HasPrefix(versionNumber, "5.") {
+		mainVersion = ES5
+	}
+
+	return mainVersion
+}
+
 func ParseEsApi(isSource bool, host string, authStr string, proxy string, compress bool) ESAPI {
 	var auth *Auth = nil
 	if len(authStr) > 0 && strings.Contains(authStr, ":") {
@@ -92,7 +121,8 @@ func ParseEsApi(isSource bool, host string, authStr string, proxy string, compre
 	}
 
 	log.Infof("%s es version: %s", esInfo, esVersion.Version.Number)
-	if strings.HasPrefix(esVersion.Version.Number, "7.") {
+	mainVersion := GetMainVersion(esVersion)
+	if mainVersion == ES7 {
 		log.Debug("es is V7,", esVersion.Version.Number)
 		api := new(ESAPIV7)
 		api.Host = host
@@ -102,7 +132,7 @@ func ParseEsApi(isSource bool, host string, authStr string, proxy string, compre
 		api.Version = esVersion
 		return api
 		//migrator.SourceESAPI = api
-	} else if strings.HasPrefix(esVersion.Version.Number, "6.") {
+	} else if mainVersion == ES6 {
 		log.Debug("es is V6,", esVersion.Version.Number)
 		api := new(ESAPIV6)
 		api.Host = host
@@ -112,7 +142,7 @@ func ParseEsApi(isSource bool, host string, authStr string, proxy string, compre
 		api.Version = esVersion
 		return api
 		//migrator.SourceESAPI = api
-	} else if strings.HasPrefix(esVersion.Version.Number, "5.") {
+	} else if mainVersion == ES5 {
 		log.Debug("es is V5,", esVersion.Version.Number)
 		api := new(ESAPIV5)
 		api.Host = host

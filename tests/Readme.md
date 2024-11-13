@@ -4,6 +4,7 @@
     ```shell
        docker-compose -f src/src-cluster-es7.yml up
        docker-compose -f src/src-single-es5.yml up
+       docker-compose -f src/src-single-es7.yml up
     
        docker-compose -f dst/dst-cluster-es7.yml up
        docker-compose -f dst/dst-single-es7.yml up

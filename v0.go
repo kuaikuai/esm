@@ -68,8 +68,12 @@ func (s *ESAPIV0) ClusterVersion() *ClusterVersion {
 	return s.Version
 }
 
+func (s *ESAPIV0) GetMainVersion() MainVersion {
+	return GetMainVersion(s.Version)
+}
+
 func (s *ESAPIV0) GetDefaultSortId() string {
-	return "_id"
+	return "_uid"
 }
 
 func (s *ESAPIV0) Bulk(data *bytes.Buffer) error {
@@ -345,19 +349,26 @@ func (s *ESAPIV0) Refresh(name string) (err error) {
 
 func (s *ESAPIV0) NewScroll(indexNames string, scrollTime string, docBufferCount int, query string, stamp string, sort string,
 	slicedId int, maxSlicedCount int, fields string) (scroll ScrollAPI, err error) {
+	url := fmt.Sprintf("%s/%s/_search?scroll=%s&size=%d", s.Host, indexNames, scrollTime, docBufferCount)
 
-	// curl -XGET 'http://es-0.9:9200/_search?search_type=scan&scroll=10m&size=50'
-	url := fmt.Sprintf("%s/%s/_search?search_type=scan&scroll=%s&size=%d", s.Host, indexNames, scrollTime, docBufferCount)
-
-	var jsonBody []byte
-	if len(query) > 0 || len(fields) > 0 {
+	jsonBody := ""
+	if len(query) > 0 || len(stamp) > 0 || maxSlicedCount > 0 || len(fields) > 0 {
 		queryBody := map[string]interface{}{}
+
 		if len(fields) > 0 {
 			if !strings.Contains(fields, ",") {
 				queryBody["_source"] = fields
 			} else {
 				queryBody["_source"] = strings.Split(fields, ",")
 			}
+		}
+
+		if len(query) > 0 {
+			if len(stamp) > 0 {
+				query = query + " AND " + stamp
+			}
+		} else if len(stamp) > 0 {
+			query = stamp
 		}
 
 		if len(query) > 0 {
@@ -372,21 +383,39 @@ func (s *ESAPIV0) NewScroll(indexNames string, scrollTime string, docBufferCount
 			queryBody["sort"] = sortFields
 		}
 
-		jsonBody, err = json.Marshal(queryBody)
+		if maxSlicedCount > 1 {
+			log.Tracef("sliced scroll, %d of %d", slicedId, maxSlicedCount)
+			queryBody["slice"] = map[string]interface{}{}
+			queryBody["slice"].(map[string]interface{})["id"] = slicedId
+			queryBody["slice"].(map[string]interface{})["max"] = maxSlicedCount
+		}
+
+		queryBuf := bytes.Buffer{}
+		queryEnc := json.NewEncoder(&queryBuf)
+		queryEnc.SetEscapeHTML(false) // don't escape for ">" or "<" in query
+		err = Verify(queryEnc.Encode(queryBody))
 		if err != nil {
 			log.Error(err)
 			return nil, err
+		} else {
+			jsonBody = queryBuf.String()
 		}
-
 	}
-	//resp, body, errs := Post(url, s.Auth,jsonBody,s.HttpProxy)
-	body, err := Request(s.Compress, "POST", url, s.Auth, bytes.NewBuffer(jsonBody), s.HttpProxy)
+
+	body, err := Request(s.Compress, "POST", url, s.Auth, bytes.NewBufferString(jsonBody), s.HttpProxy)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
 
-	scroll = &Scroll{}
+	log.Trace("new scroll,", body)
+
+	if s.GetMainVersion() >= ES7 {
+		scroll = &ScrollV7{}
+	} else {
+		scroll = &Scroll{}
+	}
+
 	err = DecodeJson(body, scroll)
 	if err != nil {
 		log.Error(err)
@@ -396,7 +425,7 @@ func (s *ESAPIV0) NewScroll(indexNames string, scrollTime string, docBufferCount
 	return scroll, err
 }
 
-func (s *ESAPIV0) NextScroll(scrollTime string, scrollId string) (ScrollAPI, error) {
+func (s *ESAPIV0) NextScroll(scrollTime string, scrollId string) (scroll ScrollAPI, err error) {
 	//  curl -XGET 'http://es-0.9:9200/_search/scroll?scroll=5m'
 	id := bytes.NewBufferString(scrollId)
 	url := fmt.Sprintf("%s/_search/scroll?scroll=%s&scroll_id=%s", s.Host, scrollTime, id)
@@ -407,8 +436,13 @@ func (s *ESAPIV0) NextScroll(scrollTime string, scrollId string) (ScrollAPI, err
 		return nil, err
 	}
 
+	if s.GetMainVersion() >= ES7 {
+		scroll = &ScrollV7{}
+	} else {
+		scroll = &Scroll{}
+	}
+
 	// decode elasticsearch scroll response
-	scroll := &Scroll{}
 	err = DecodeJson(body, &scroll)
 	if err != nil {
 		log.Error(err)
