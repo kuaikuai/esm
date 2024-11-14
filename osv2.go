@@ -16,18 +16,18 @@ limitations under the License.
 
 package main
 
-type ESAPIV5 struct {
-	ESAPIV0
+type OPENSEARCHV2 struct {
+	OPENSEARCHV1
 }
 
-func NewEsApiV5(host string, auth *Auth, httpProxy string, compress bool, version *ClusterVersion) ESAPI {
-	apiV5 := &ESAPIV5{}
+func NewOpenSearchV2(host string, auth *Auth, httpProxy string, compress bool, version *ClusterVersion) ESAPI {
+	apiOsV2 := &OPENSEARCHV2{}
 
-	apiV5.Host = host
-	apiV5.Auth = auth
-	apiV5.HttpProxy = httpProxy
-	apiV5.Compress = compress
-	apiV5.Version = version
+	apiOsV2.Host = host
+	apiOsV2.Auth = auth
+	apiOsV2.HttpProxy = httpProxy
+	apiOsV2.Compress = compress
+	apiOsV2.Version = version
 
-	return apiV5
+	return apiOsV2
 }

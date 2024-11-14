@@ -34,6 +34,18 @@ type ESAPIV6 struct {
 	ESAPIV5
 }
 
+func NewEsApiV6(host string, auth *Auth, httpProxy string, compress bool, version *ClusterVersion) ESAPI {
+	apiV6 := &ESAPIV6{}
+
+	apiV6.Host = host
+	apiV6.Auth = auth
+	apiV6.HttpProxy = httpProxy
+	apiV6.Compress = compress
+	apiV6.Version = version
+
+	return apiV6
+}
+
 func (s *ESAPIV6) GetDefaultSortId() string {
 	return "_id"
 }

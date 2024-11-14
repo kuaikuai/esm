@@ -67,6 +67,9 @@ type ClusterVersion struct {
 	Name        string `json:"name,omitempty"`
 	ClusterName string `json:"cluster_name,omitempty"`
 	Version     struct {
+		// OpenSearch 才有的字段
+		Distribution string `json:"distribution,omitempty"`
+
 		Number        string `json:"number,omitempty"`
 		BuildDate     string `json:"build_date,omitempty"`
 		LuceneVersion string `json:"lucene_version,omitempty"`
@@ -117,13 +120,14 @@ type Config struct {
 	BufferCount         int    `long:"buffer_count"   description:"number of buffered documents in memory" default:"1000000"`
 	Workers             int    `short:"w" long:"workers" description:"concurrency number for bulk workers" default:"1"`
 	BulkSizeInMB        int    `short:"b" long:"bulk_size" description:"bulk size in MB" default:"5"`
-	ScrollTime          string `short:"t" long:"time"    description:"scroll time" default:"10m"`
+	ScrollTime          string `short:"t" long:"time"    description:"scroll time" default:"1m"`
 	ScrollSliceSize     int    `long:"sliced_scroll_size"    description:"size of sliced scroll, to make it work, the size should be > 1" default:"1"`
 	RecreateIndex       bool   `short:"f" long:"force"   description:"delete destination index before copying"`
 	CopyAllIndexes      bool   `short:"a" long:"all"     description:"copy indexes starting with . and _"`
 	CopyIndexSettings   bool   `long:"copy_settings"          description:"copy index settings from source"`
 	CopyIndexMappings   bool   `long:"copy_mappings"          description:"copy index mappings from source"`
 	ShardsCount         int    `long:"shards"            description:"set a number of shards on newly created indexes"`
+	ReplicasCount       int    `long:"replicas"          description:"set a number of replicas on newly created indexes"`
 	SourceIndexNames    string `short:"x" long:"src_indexes" description:"indexes name to copy,support regex and comma separated list" default:"_all"`
 	TargetIndexName     string `short:"y" long:"dest_index" description:"indexes name to save, allow only one indexname, original indexname will be used if not specified" default:""`
 	OverrideTypeName    string `short:"u" long:"type_override" description:"override type name" default:""`
@@ -137,6 +141,7 @@ type Config struct {
 	TargetProxy         string `long:"dest_proxy"            description:"set proxy to target http connections, ie: http://127.0.0.1:8080"`
 	Refresh             bool   `long:"refresh"                 description:"refresh after migration finished"`
 	Sync                bool   `long:"sync"                   description:"sync will use scroll for both source and target index, compare the data and sync(index/update/delete)"`
+	EnableDelete        bool   `long:"enable_delete"          description:"enable delete records in dest index if there are more records"`
 	Fields              string `long:"fields"                 description:"filter source fields(white list), comma separated, ie: col1,col2,col3,..." `
 	SkipFields          string `long:"skip"                   description:"skip source fields(black list), comma separated, ie: col1,col2,col3,..." `
 	RenameFields        string `long:"rename"                 description:"rename source fields, comma separated, ie: _type:type, name:myname" `

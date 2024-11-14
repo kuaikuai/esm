@@ -8,6 +8,7 @@
     
        docker-compose -f dst/dst-cluster-es7.yml up
        docker-compose -f dst/dst-single-es7.yml up
+       docker-compose -f dst/dst-single-opensearch2.yml up
     ```
   
   - 启动以后可访问:
@@ -21,11 +22,11 @@
   
   - es5:
     ```shell
-      curl -H "Content-Type: application/json" -X POST "http://localhost:9201/account/account/_bulk?pretty" --data-binary  "@tests/accounts.json"
+      curl -H "Content-Type: application/json" -X POST "http://localhost:9201/account/account/_bulk?pretty" --data-binary  "@accounts.json"
     ```
   - es7:
     ```shell
-      curl -H "Content-Type: application/json" -X POST "http://localhost:9201/account/_doc/_bulk?pretty" --data-binary  "@tests/accounts.json"
+      curl -H "Content-Type: application/json" -X POST "http://localhost:9201/account/_doc/_bulk?pretty" --data-binary  "@accounts.json"
     ```
   
 - 3.使用 esm 进行同步
@@ -47,6 +48,12 @@
     esm --source=http://localhost:19201 --ssort=account_number --src_indexes=account --truncate_output --skip=_index,_type,sort --output_file=dst.json
     diff -W 200 -ry --suppress-common-lines src.json dst.json
   ```
+  - 比较所有的 Index
+  ```
+        http://localhost:9201/_cat/indices?v&h=index,health,status,docs.count,docs.deleted,store.size,pri.store.size&s=index
+        http://localhost:19201/_cat/indices?v&h=index,health,status,docs.count,docs.deleted,store.size,pri.store.size&s=index
+  ```
+
    
 
 ### 常见问题:

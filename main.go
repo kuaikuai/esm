@@ -364,7 +364,7 @@ func copyIndexSettings(c *Config,
 	sourceIndexRefreshSettings map[string]interface{},
 	sourceIndexMappings *Indexes) (err error) {
 	// copy index settings if user asked
-	if c.CopyIndexSettings || c.ShardsCount > 0 {
+	if c.CopyIndexSettings || c.ShardsCount > 0 || c.ReplicasCount > 0 {
 		log.Info("start settings/mappings migration..")
 
 		//get source index settings
@@ -442,6 +442,9 @@ func copyIndexSettings(c *Config,
 					if c.ShardsCount > 0 {
 						tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_shards"] = c.ShardsCount
 					}
+					if c.ReplicasCount > 0 {
+						tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_replicas"] = c.ReplicasCount
+					}
 
 					//log.Info("source index settings:", sourceIndexSettings)
 					//log.Info("target IndexSettings", targetIndexSettings)
@@ -457,6 +460,9 @@ func copyIndexSettings(c *Config,
 				//override shard settings
 				if c.ShardsCount > 0 {
 					tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_shards"] = c.ShardsCount
+				}
+				if c.ReplicasCount > 0 {
+					tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_replicas"] = c.ReplicasCount
 				}
 
 				log.Debug("create index with settings,", name, tempIndexSettings)

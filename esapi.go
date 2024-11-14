@@ -91,12 +91,21 @@ func GetClusterVersion(host string, auth *Auth, proxy string) (*ClusterVersion, 
 func GetMainVersion(cVersion *ClusterVersion) MainVersion {
 	mainVersion := VersionUnknown
 	versionNumber := cVersion.Version.Number
-	if strings.HasPrefix(versionNumber, "7.") {
-		mainVersion = ES7
-	} else if strings.HasPrefix(versionNumber, "6.") {
-		mainVersion = ES6
-	} else if strings.HasPrefix(versionNumber, "5.") {
-		mainVersion = ES5
+	if len(cVersion.Version.Distribution) == 0 {
+		if strings.HasPrefix(versionNumber, "7.") {
+			mainVersion = ES7
+		} else if strings.HasPrefix(versionNumber, "6.") {
+			mainVersion = ES6
+		} else if strings.HasPrefix(versionNumber, "5.") {
+			mainVersion = ES5
+		}
+	} else if cVersion.Version.Distribution == "opensearch" {
+		//OpenSearch
+		if strings.HasPrefix(versionNumber, "2.") {
+			mainVersion = OS2
+		} else if strings.HasPrefix(versionNumber, "1.") {
+			mainVersion = OS1
+		}
 	}
 
 	return mainVersion
@@ -122,44 +131,25 @@ func ParseEsApi(isSource bool, host string, authStr string, proxy string, compre
 
 	log.Infof("%s es version: %s", esInfo, esVersion.Version.Number)
 	mainVersion := GetMainVersion(esVersion)
-	if mainVersion == ES7 {
+	var api ESAPI = nil
+	switch mainVersion {
+	case OS2:
+		log.Debug("is open search v2,", esVersion.Version.Number)
+		api = NewOpenSearchV2(host, auth, proxy, compress, esVersion)
+	case OS1:
+		log.Debug("is open search v1,", esVersion.Version.Number)
+		api = NewOpenSearchV1(host, auth, proxy, compress, esVersion)
+	case ES7:
 		log.Debug("es is V7,", esVersion.Version.Number)
-		api := new(ESAPIV7)
-		api.Host = host
-		api.Compress = compress
-		api.Auth = auth
-		api.HttpProxy = proxy
-		api.Version = esVersion
-		return api
-		//migrator.SourceESAPI = api
-	} else if mainVersion == ES6 {
+		api = NewEsApiV7(host, auth, proxy, compress, esVersion)
+	case ES6:
 		log.Debug("es is V6,", esVersion.Version.Number)
-		api := new(ESAPIV6)
-		api.Host = host
-		api.Compress = compress
-		api.Auth = auth
-		api.HttpProxy = proxy
-		api.Version = esVersion
-		return api
-		//migrator.SourceESAPI = api
-	} else if mainVersion == ES5 {
+		api = NewEsApiV6(host, auth, proxy, compress, esVersion)
+	case ES5:
 		log.Debug("es is V5,", esVersion.Version.Number)
-		api := new(ESAPIV5)
-		api.Host = host
-		api.Compress = compress
-		api.Auth = auth
-		api.HttpProxy = proxy
-		api.Version = esVersion
-		return api
-		//migrator.SourceESAPI = api
-	} else {
-		log.Debug("es is not V5,", esVersion.Version.Number)
-		api := new(ESAPIV0)
-		api.Host = host
-		api.Compress = compress
-		api.Auth = auth
-		api.HttpProxy = proxy
-		api.Version = esVersion
-		return api
+		api = NewEsApiV5(host, auth, proxy, compress, esVersion)
+	default:
+		api = nil
 	}
+	return api
 }

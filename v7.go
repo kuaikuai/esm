@@ -28,6 +28,18 @@ type ESAPIV7 struct {
 	ESAPIV6
 }
 
+func NewEsApiV7(host string, auth *Auth, httpProxy string, compress bool, version *ClusterVersion) ESAPI {
+	apiV7 := &ESAPIV7{}
+
+	apiV7.Host = host
+	apiV7.Auth = auth
+	apiV7.HttpProxy = httpProxy
+	apiV7.Compress = compress
+	apiV7.Version = version
+
+	return apiV7
+}
+
 func (s *ESAPIV7) UpdateIndexMapping(indexName string, settings map[string]interface{}) error {
 
 	log.Debug("start update mapping: ", indexName, settings)

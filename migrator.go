@@ -259,6 +259,10 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 			Type:  targetType,
 			Id:    docId, // docI["_id"].(string),
 		}
+		if m.TargetESAPI.GetMainVersion() > ES7 {
+			//don't support _type after es8, TODO: opensearch?
+			doc.Type = ""
+		}
 
 		switch bulkOp {
 		case opIndex:
@@ -469,8 +473,10 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 
 		if len(dstDocMaps) > 0 && lastSrcId < lastDestId {
 			//dstDocMaps 中还有记录,而且当前已经检测过所有比 srcId 都大的数据,之后的比较不会再更改结构,避免其中保存太多
-			deleteCount += len(dstDocMaps)
-			_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, dstType, dstDocMaps))
+			if cfg.EnableDelete {
+				deleteCount += len(dstDocMaps)
+				_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, dstType, dstDocMaps))
+			}
 			dstDocMaps = make(map[string]interface{})
 		}
 
@@ -485,8 +491,10 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			}
 			if len(dstDocMaps) > 0 {
 				//最后在 dst 中还有遗留的,表示 dst 中多的.需要删除
-				deleteCount += len(dstDocMaps)
-				_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, dstType, dstDocMaps))
+				if cfg.EnableDelete {
+					deleteCount += len(dstDocMaps)
+					_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, dstType, dstDocMaps))
+				}
 				dstDocMaps = make(map[string]interface{})
 			}
 

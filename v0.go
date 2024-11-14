@@ -37,6 +37,17 @@ type ESAPIV0 struct {
 	Version   *ClusterVersion
 }
 
+func NewEsApiV0(host string, auth *Auth, httpProxy string, compress bool, version *ClusterVersion) ESAPI {
+	apiV0 := &ESAPIV0{
+		Host:      host,
+		Auth:      auth,
+		HttpProxy: httpProxy,
+		Compress:  compress,
+		Version:   version,
+	}
+	return apiV0
+}
+
 func (s *ESAPIV0) ClusterHealth() *ClusterHealth {
 
 	url := fmt.Sprintf("%s/_cluster/health", s.Host)
@@ -224,6 +235,7 @@ func getEmptyIndexSettings() map[string]interface{} {
 
 func cleanSettings(settings map[string]interface{}) {
 	//clean up settings
+	delete(settings["settings"].(map[string]interface{})["index"].(map[string]interface{}), "routing")
 	delete(settings["settings"].(map[string]interface{})["index"].(map[string]interface{}), "creation_date")
 	delete(settings["settings"].(map[string]interface{})["index"].(map[string]interface{}), "uuid")
 	delete(settings["settings"].(map[string]interface{})["index"].(map[string]interface{}), "version")
@@ -232,8 +244,14 @@ func cleanSettings(settings map[string]interface{}) {
 
 func (s *ESAPIV0) CanUpdateIndex(name string) bool {
 	//TODO:
-	// reason=Can't update non dynamic settings [[index.number_of_shards]] for open indices [[api_api_key/pYCRXSe5TEeJkRU0j83thw]]
-	if s.Version.Version.Number >= "7." {
+	// in 6.2.2: reason=Can't update non dynamic settings [[index.number_of_shards]] for open indices [[api_api_key/pYCRXSe5TEeJkRU0j83thw]]
+	if len(s.Version.Version.Distribution) == 0 {
+		//ES
+		if s.Version.Version.Number >= "6." {
+			return false
+		}
+	} else {
+		//open search
 		return false
 	}
 	return true
