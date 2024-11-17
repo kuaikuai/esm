@@ -1,4 +1,30 @@
-# An Elasticsearch Migration Tool
+# SST(Search Sync Tool)
+
+- 基于 [medcl/esm](https://github.com/medcl/esm) 重构的 Search(Elasticsearch/OpenSearch) 同步工具
+
+## 背景
+* 因为要做集群灾备,需要在主备两个集群之间持续性地同步数据,调查过多个方案:
+  * CCR(Cross-cluster replication) 官方工具,可惜需要收费,无奈放弃 :-(
+  * esm 如官方文档说所,最大的特点***快***. 可惜也发现不少问题：
+    * 同步后发现数据不全，一般需要采用多次执行的方式来补全数据;
+    * 调查后发现，其采用的是获取源数据后，使用多个 goroutine 将数据通过`bulk`写入目标index, 会造成目标index重复写入很多相同数据的问题;
+    * 更改源码,加入 `--sync` 功能，通过 `scroll` 同时查询源和目标index,比较其内容的方式,实现增量更新(Add/Update/Del), 目前该 [PR/84](https://github.com/medcl/esm/pull/84) 已经合并到esm中。
+    * 目前 esm 的作者已经不再维护，因此后来发现的一些bug也很难改善及合并。
+    * 从 issue 和 源码来看, esm 不支持 OpenSearch, esm作者以后也不会再更改
+
+### 更改
+  * 对源码进行了更改,对同步(Sync)功能进行了加强,从而满足我在两个集群之间"近"实时同步的需求。
+    * 增加 `--stamp` 参数，如果 index 中有表示`最后更新时间`的字段,可以进一步减少查询的数据量(本质是利用esm中的 --query 方式,单独提取出来更易于控制)
+    * 增加对 `OpenSearch` 的支持
+    * 对已有代码进行了较大的重构,更改了一些bug
+    * 编写通用的集群同步脚本 `search_sync.sh`, 可以按需同步集群中的index,也可以对每月自动生成的 index 进行处理.
+    * 为了方便测试,使用 docker-compose 来设置不同版本,不同类型的 源/目标 集群.
+    
+### 注意
+  * 目前主要的更改集中在 `--sync` 上,其他功能测试的不多,有可能会出现问题.
+
+# 我是分割线(以下是原始文档,尚未更改)
+---------- 
 
 Elasticsearch cross version data migration.
 

@@ -1,4 +1,4 @@
-module github.com/medcl/esm
+module github.com/fishjam/sst
 
 go 1.21.1
 

@@ -32,7 +32,7 @@ func setInitLogging(logLevel string) {
 	testConfig = testConfig + `">
 		<outputs formatid="main">
 			<filter levels="trace">
-				<file path="./esm.log"/>
+				<file path="./sst.log"/>
 			</filter>
 			<console formatid="main" />
 		</outputs>

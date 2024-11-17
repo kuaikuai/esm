@@ -1,4 +1,4 @@
-### 使用 docker-compose 来测试 ESM
+### 使用 docker-compose 来测试 SST
 - 1.有 es_src + es_dst 两个集群, 因此可以很方便的单独重启初始化
   - start es 
     ```shell
@@ -29,23 +29,21 @@
       curl -H "Content-Type: application/json" -X POST "http://localhost:9201/account/_doc/_bulk?pretty" --data-binary  "@accounts.json"
     ```
   
-- 3.使用 esm 进行同步
+- 3.使用 sst 进行同步
   - es5 to es7
   ```shell
-    ..\esm --sync --ssort=account_number -c 10000 -v debug -s http://127.0.0.1:9201 -x account -d http://127.0.0.1:19201 -y account -u "_doc"
-       --source_proxy=http://localhost:8888 --dest_proxy=http://localhost:8888
+    ..\sst --sync --ssort=account_number -c 10000 -v debug -s http://127.0.0.1:9201 -x account -d http://127.0.0.1:19201 -y account -u "_doc"
   ```  
 
   - es7 to es7
   ```shell
-    ..\esm --sync --shards=2 -c 10000 -v debug --copy_settings --copy_mappings 
+    ..\sst --sync --shards=2 -c 10000 -v debug --copy_settings --copy_mappings 
       -s http://127.0.0.1:9201 -x account -d http://127.0.0.1:19201 -y account -u "_doc"
-      --source_proxy=http://localhost:8888 --dest_proxy=http://localhost:8888
   ```
   - 导出数据进行比较
   ```shell
-    esm --source=http://localhost:9201 --ssort=account_number --src_indexes=account --truncate_output --skip=_index,_type,sort --output_file=src.json
-    esm --source=http://localhost:19201 --ssort=account_number --src_indexes=account --truncate_output --skip=_index,_type,sort --output_file=dst.json
+    sst --source=http://localhost:9201 --ssort=account_number --src_indexes=account --truncate_output --skip=_index,_type,sort --output_file=src.json
+    sst --source=http://localhost:19201 --ssort=account_number --src_indexes=account --truncate_output --skip=_index,_type,sort --output_file=dst.json
     diff -W 200 -ry --suppress-common-lines src.json dst.json
   ```
   - 比较所有的 Index
