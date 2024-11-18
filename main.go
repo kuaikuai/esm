@@ -17,6 +17,8 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
+var Version = "1.2.3.4"
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
@@ -44,6 +46,11 @@ func main() {
 	// parse args
 	_, err = VerifyWithResultEx(goflags.Parse(c))
 	if err != nil {
+		return
+	}
+
+	if c.Version {
+		println("sst version: ", Version)
 		return
 	}
 

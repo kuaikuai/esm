@@ -106,7 +106,7 @@ type Migrator struct {
 }
 
 type Config struct {
-
+	Version bool `short:"v" long:"version"  description:"display version"`
 	// config options
 	SourceEs            string `short:"s" long:"source"  description:"source elasticsearch instance, ie: http://localhost:9200"`
 	Query               string `short:"q" long:"query"  description:"query against source elasticsearch instance, filter data before migrate, ie: name:medcl"`
@@ -132,7 +132,7 @@ type Config struct {
 	TargetIndexName     string `short:"y" long:"dest_index" description:"indexes name to save, allow only one indexname, original indexname will be used if not specified" default:""`
 	OverrideTypeName    string `short:"u" long:"type_override" description:"override type name" default:""`
 	WaitForGreen        bool   `long:"green"             description:"wait for both hosts cluster status to be green before dump. otherwise yellow is okay"`
-	LogLevel            string `short:"v" long:"log"            description:"setting log level,options:trace,debug,info,warn,error"  default:"INFO"`
+	LogLevel            string `long:"log"            description:"setting log level,options:trace,debug,info,warn,error"  default:"INFO"`
 	DumpOutFile         string `short:"o" long:"output_file"            description:"output documents of source index into local file" `
 	TruncateOutFile     bool   `long:"truncate_output" description:"truncate before dump to output file" `
 	DumpInputFile       string `short:"i" long:"input_file"            description:"indexing from local dump file" `

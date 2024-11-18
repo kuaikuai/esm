@@ -22,12 +22,14 @@ jobs:
     - name: Build
       run: |
         mkdir -p build
-        export GOOS=windows; export GOARCH=amd64; go build -o build/esm-$GOOS-$GOARCH.exe -v -buildmode=exe  . 
-        export GOOS=windows; export GOARCH=arm64; go build -o build/esm-$GOOS-$GOARCH.exe -v -buildmode=exe  . 
-        export GOOS=linux; export GOARCH=amd64;   go build -o build/esm-$GOOS-$GOARCH -v -buildmode=exe . 
-        export GOOS=linux; export GOARCH=arm64;   go build -o build/esm-$GOOS-$GOARCH -v -buildmode=exe . 
-        export GOOS=darwin; export GOARCH=amd64;  go build -o build/esm-$GOOS-$GOARCH -v -buildmode=exe . 
-        export GOOS=darwin; export GOARCH=arm64;  go build -o build/esm-$GOOS-$GOARCH -v -buildmode=exe .
+        export SST_VERSION="`date +"%Y.%m.%d"`.`git rev-parse --short HEAD`"
+        export LDFLAGS="-X \"main.Version=$SST_VERSION\""
+        export GOOS=windows; export GOARCH=amd64; go build -ldflags "$LDFLAGS" -o build/esm-$GOOS-$GOARCH.exe -v -buildmode=exe  . 
+        export GOOS=windows; export GOARCH=arm64; go build -ldflags "$LDFLAGS" -o build/esm-$GOOS-$GOARCH.exe -v -buildmode=exe  . 
+        export GOOS=linux; export GOARCH=amd64;   go build -ldflags "$LDFLAGS" -o build/esm-$GOOS-$GOARCH -v -buildmode=exe . 
+        export GOOS=linux; export GOARCH=arm64;   go build -ldflags "$LDFLAGS" -o build/esm-$GOOS-$GOARCH -v -buildmode=exe . 
+        export GOOS=darwin; export GOARCH=amd64;  go build -ldflags "$LDFLAGS" -o build/esm-$GOOS-$GOARCH -v -buildmode=exe . 
+        export GOOS=darwin; export GOARCH=arm64;  go build -ldflags "$LDFLAGS" -o build/esm-$GOOS-$GOARCH -v -buildmode=exe .
       env:
         GO111MODULE: on
         # macos not support
