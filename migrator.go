@@ -112,7 +112,16 @@ func (m *Migrator) ParseEsApi(isSource bool, host string, authStr string, proxy 
 	}
 
 	log.Infof("%s es version: %s", esInfo, esVersion.Version.Number)
-	if strings.HasPrefix(esVersion.Version.Number, "7.") {
+	if strings.HasPrefix(esVersion.Version.Number, "8.") {
+		log.Debug("es is v8,", esVersion.Version.Number)
+		api := new(ESAPIV8)
+		api.Host = host
+		api.Compress = compress
+		api.Auth = auth
+		api.HttpProxy = proxy
+		api.Version = esVersion
+		return api
+	} else if strings.HasPrefix(esVersion.Version.Number, "7.") {
 		log.Debug("es is V7,", esVersion.Version.Number)
 		api := new(ESAPIV7)
 		api.Host = host
@@ -193,6 +202,15 @@ func (m *Migrator) NewBulkWorker(docCount *int, pb *pb.ProgressBar, wg *sync.Wai
 	taskTimeout := time.NewTimer(taskTimeOutDuration)
 	defer taskTimeout.Stop()
 
+	haveTypeField := true
+	if reflect.TypeOf(m.TargetESAPI).String() == "*main.ESAPIV8" {
+		haveTypeField = false
+	}
+	checkKeys := []string{"_index", "_type", "_source", "_id"}
+	if !haveTypeField {
+		checkKeys = []string{"_index", "_source", "_id"}
+	}
+
 READ_DOCS:
 	for {
 		idleTimeout.Reset(idleDuration)
@@ -210,7 +228,7 @@ READ_DOCS:
 			}
 
 			// sanity check
-			for _, key := range []string{"_index", "_type", "_source", "_id"} {
+			for _, key := range checkKeys {
 				if _, ok := docI[key]; !ok {
 					break READ_DOCS
 				}
@@ -219,8 +237,9 @@ READ_DOCS:
 			var tempDestIndexName string
 			var tempTargetTypeName string
 			tempDestIndexName = docI["_index"].(string)
-			tempTargetTypeName = docI["_type"].(string)
-
+			if haveTypeField {
+				tempTargetTypeName = docI["_type"].(string)
+			}
 			if m.Config.TargetIndexName != "" {
 				tempDestIndexName = m.Config.TargetIndexName
 			}
@@ -230,10 +249,13 @@ READ_DOCS:
 			}
 
 			doc := Document{
-				Index:  tempDestIndexName,
-				Type:   tempTargetTypeName,
+				Index: tempDestIndexName,
+				//Type:   tempTargetTypeName,
 				source: docI["_source"].(map[string]interface{}),
 				Id:     docI["_id"].(string),
+			}
+			if haveTypeField {
+				doc.Type = tempTargetTypeName
 			}
 
 			if m.Config.RegenerateID {
@@ -270,7 +292,7 @@ READ_DOCS:
 			}
 
 			// sanity check
-			if len(doc.Index) == 0 || len(doc.Type) == 0 {
+			if len(doc.Index) == 0 || len(doc.Type) == 0 && haveTypeField {
 				log.Errorf("failed decoding document: %+v", doc)
 				continue
 			}
@@ -567,9 +589,9 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 	//dstBar.FinishPrint("Dest End")
 	//pool.Stop()
 
-        log.Infof("sync %s(%d) to %s(%d), add=%d, update=%d, delete=%d",
-                cfg.SourceIndexNames, srcRecordIndex, cfg.TargetIndexName, dstRecordIndex,
-                addCount, updateCount, deleteCount)
+	log.Infof("sync %s(%d) to %s(%d), add=%d, update=%d, delete=%d",
+		cfg.SourceIndexNames, srcRecordIndex, cfg.TargetIndexName, dstRecordIndex,
+		addCount, updateCount, deleteCount)
 
 	//log.Infof("diffDocMaps=%+v", diffDocMaps)
 }
