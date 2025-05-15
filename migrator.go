@@ -358,9 +358,13 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 	mainBuf := bytes.Buffer{}
 	docBuf := bytes.Buffer{}
 	docEnc := json.NewEncoder(&docBuf)
-
+	haveTypeField := true
 	//var tempDestIndexName string
 	//var tempTargetTypeName string
+
+	if reflect.TypeOf(dstEsApi).String() == "*main.ESAPIV8" {
+		haveTypeField = false
+	}
 
 	for docId, docData := range diffDocMaps {
 		docI := docData.(map[string]interface{})
@@ -370,10 +374,12 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 		var strOperation string
 		doc := Document{
 			Index: targetIndex,
-			Type:  targetType,
-			Id:    docId, // docI["_id"].(string),
+			//Type:  targetType,
+			Id: docId, // docI["_id"].(string),
 		}
-
+		if haveTypeField {
+			doc.Type = targetType
+		}
 		switch bulkOp {
 		case opIndex:
 			doc.source = docI // docI["_source"].(map[string]interface{}),
