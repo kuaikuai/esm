@@ -150,7 +150,7 @@ func main() {
 
 						if scroll.GetHitsTotal() == 0 {
 							log.Error("can't find documents from source.")
-							return
+							//return
 						}
 
 						go func() {
@@ -246,10 +246,9 @@ func main() {
 					migrator.TargetESAPI.ClusterVersion().Version.Number[0] != migrator.SourceESAPI.ClusterVersion().Version.Number[0] {
 					log.Error(migrator.SourceESAPI.ClusterVersion().Version, "=>",
 						migrator.TargetESAPI.ClusterVersion().Version,
-						",cross-big-version mapping migration not available, please update mapping manually :(")
-					return
+						",cross-big-version mapping migration, please confirm manually !!")
+					//return
 				}
-
 				// wait for cluster state to be okay before moving
 				idleDuration := 3 * time.Second
 				timer := time.NewTimer(idleDuration)
@@ -291,11 +290,9 @@ func main() {
 					if indexCount > 0 {
 						//override indexnames to be copy
 						c.SourceIndexNames = indexNames
-
 						// copy index settings if user asked
 						if c.CopyIndexSettings || c.ShardsCount > 0 {
 							log.Info("start settings/mappings migration..")
-
 							//get source index settings
 							var sourceIndexSettings *Indexes
 							sourceIndexSettings, err := migrator.SourceESAPI.GetIndexSettings(c.SourceIndexNames)
@@ -344,8 +341,10 @@ func main() {
 								//copy index settings
 								if c.CopyIndexSettings {
 									tempIndexSettings = ((*sourceIndexSettings)[name]).(map[string]interface{})
+									if c.CopyIndexMappings {
+										tempIndexSettings["mappings"] = (*sourceIndexMappings)[name].(map[string]interface{})["mappings"]
+									}
 								}
-
 								//check map elements
 								if _, ok := tempIndexSettings["settings"]; !ok {
 									tempIndexSettings["settings"] = map[string]interface{}{}
@@ -392,7 +391,7 @@ func main() {
 
 							}
 
-							if c.CopyIndexMappings {
+							if c.CopyIndexMappings && !c.CopyIndexSettings {
 
 								//if there is only one index and we specify the dest indexname
 								if c.SourceIndexNames != c.TargetIndexName && (len(c.TargetIndexName) > 0) && indexCount == 1 {
