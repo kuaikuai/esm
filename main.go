@@ -149,7 +149,7 @@ func main() {
 					if scroll.GetDocs() != nil {
 
 						if scroll.GetHitsTotal() == 0 {
-							log.Error("can't find documents from source.")
+							log.Warn("can't find documents from source.")
 							//return
 						}
 
@@ -244,7 +244,7 @@ func main() {
 				log.Debug("start process with mappings")
 				if c.CopyIndexMappings &&
 					migrator.TargetESAPI.ClusterVersion().Version.Number[0] != migrator.SourceESAPI.ClusterVersion().Version.Number[0] {
-					log.Error(migrator.SourceESAPI.ClusterVersion().Version, "=>",
+					log.Warn(migrator.SourceESAPI.ClusterVersion().Version, "=>",
 						migrator.TargetESAPI.ClusterVersion().Version,
 						",cross-big-version mapping migration, please confirm manually !!")
 					//return
@@ -385,6 +385,7 @@ func main() {
 									err := migrator.TargetESAPI.CreateIndex(name, tempIndexSettings)
 									if err != nil {
 										log.Error(err)
+										return
 									}
 
 								}
