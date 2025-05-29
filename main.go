@@ -93,6 +93,21 @@ func main() {
 		return
 	}
 
+	if c.DiffCounts {
+		migrator.SourceESAPI = migrator.ParseEsApi(true, c.SourceEs, c.SourceEsAuthStr, c.SourceProxy, c.Compress)
+		if migrator.SourceESAPI == nil {
+			log.Error("can not parse source es api")
+			return
+		}
+		migrator.TargetESAPI = migrator.ParseEsApi(false, c.TargetEs, c.TargetEsAuthStr, c.TargetProxy, false)
+		if migrator.TargetESAPI == nil {
+			log.Error("can not parse target es api")
+			return
+		}
+		migrator.DiffCounts(migrator.SourceESAPI, migrator.TargetESAPI)
+		return
+	}
+
 	//至少输出一次
 	if c.RepeatOutputTimes < 1 {
 		c.RepeatOutputTimes = 1

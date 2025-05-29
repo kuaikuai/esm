@@ -145,6 +145,7 @@ type Config struct {
 	RegenerateID              bool `short:"r" long:"regenerate_id"   description:"regenerate id for documents, this will override the exist document id in data source"`
 	Compress                  bool `long:"compress"            description:"use gzip to compress traffic"`
 	SleepSecondsAfterEachBulk int  `short:"p" long:"sleep" description:"sleep N seconds after each bulk request" default:"-1"`
+	DiffCounts                bool `long:"diff_counts" description:"count the difference between source and target indexes"`
 }
 
 type Auth struct {

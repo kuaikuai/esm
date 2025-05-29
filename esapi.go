@@ -33,4 +33,5 @@ type ESAPI interface {
 	NextScroll(scrollTime string, scrollId string) (ScrollAPI, error)
 	DeleteScroll(scrollId string) error
 	Refresh(name string) (err error)
+	GetIndices(pattern string) (*map[string]IndexInfo, error)
 }

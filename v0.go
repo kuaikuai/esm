@@ -25,6 +25,7 @@ import (
 	"io"
 	"io/ioutil"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -416,4 +417,106 @@ func (s *ESAPIV0) DeleteScroll(scrollId string) error {
 		//log.Infof("delete scroll, result=%s", body)
 	}
 	return nil
+}
+
+type IndexInfo struct {
+	ID            string `json:"id,omitempty"`
+	Index         string `json:"index,omitempty"`
+	Status        string `json:"status,omitempty"`
+	Health        string `json:"health,omitempty"`
+	Shards        int    `json:"shards,omitempty"`
+	Replicas      int    `json:"replicas,omitempty"`
+	DocsCount     int64  `json:"docs_count,omitempty"`
+	DocsDeleted   int64  `json:"docs_deleted,omitempty"`
+	SegmentsCount int64  `json:"segments_count,omitempty"`
+	StoreSize     string `json:"store_size,omitempty"`
+	PriStoreSize  string `json:"pri_store_size,omitempty"`
+}
+
+type CatIndexResponse struct {
+	Health       string `json:"health,omitempty"`
+	Status       string `json:"status,omitempty"`
+	Index        string `json:"index,omitempty"`
+	Uuid         string `json:"uuid,omitempty"`
+	Pri          string `json:"pri,omitempty"`
+	Rep          string `json:"rep,omitempty"`
+	DocsCount    string `json:"docs.count,omitempty"`
+	DocsDeleted  string `json:"docs.deleted,omitempty"`
+	StoreSize    string `json:"store.size,omitempty"`
+	PriStoreSize string `json:"pri.store.size,omitempty"`
+	SegmentCount string `json:"segments.count,omitempty"`
+
+	//TotalMemory string `json:"memory.total,omitempty"`
+	//FieldDataMemory string `json:"fielddata.memory_size,omitempty"`
+	//FieldDataEvictions string `json:"fielddata.evictions,omitempty"`
+	//QueryCacheMemory string `json:"query_cache.memory_size,omitempty"`
+	//QueryCacheEvictions string `json:"query_cache.evictions,omitempty"`
+	//RequestCacheMemory string `json:"request_cache.memory_size,omitempty"`
+	//RequestCacheEvictions string `json:"request_cache.evictions,omitempty"`
+	//RequestCacheHitCount string `json:"request_cache.hit_count,omitempty"`
+	//RequestCacheMissCount string `json:"request_cache.miss_count,omitempty"`
+	//SegmentMemory string `json:"segments.memory,omitempty"`
+	//SegmentWriterMemory string `json:"segments.index_writer_memory,omitempty"`
+	//SegmentVersionMapMemory string `json:"segments.version_map_memory,omitempty"`
+	//SegmentFixedBitsetMemory string `json:"segments.fixed_bitset_memory,omitempty"`
+}
+
+func ToInt64(str string) (int64, error) {
+	return strconv.ParseInt(str, 10, 64)
+}
+
+func ToInt(str string) (int, error) {
+	if strings.IndexAny(str, ".") > 0 {
+		nonFractionalPart := strings.Split(str, ".")
+		return strconv.Atoi(nonFractionalPart[0])
+	} else {
+		return strconv.Atoi(str)
+	}
+
+}
+
+func (c *ESAPIV0) GetIndices(pattern string) (*map[string]IndexInfo, error) {
+	format := "%s/_cat/indices%s?h=health,status,index,uuid,pri,rep,docs.count,docs.deleted,store.size,pri.store.size,segments.count&format=json"
+	if pattern != "" {
+		pattern = "/" + pattern
+	}
+	url := fmt.Sprintf(format, c.Host, pattern)
+	resp, body, errs := Get(url, c.Auth, c.HttpProxy)
+	if resp != nil && resp.Body != nil {
+		io.Copy(ioutil.Discard, resp.Body)
+		defer resp.Body.Close()
+	}
+	if errs != nil {
+		return nil, errs[0]
+	}
+	if resp.StatusCode != 200 {
+		return nil, errors.New(body)
+	}
+	data := []CatIndexResponse{}
+	err := json.Unmarshal([]byte(body), &data)
+	if err != nil {
+		return nil, err
+	}
+
+	indexInfo := map[string]IndexInfo{}
+	for _, v := range data {
+		info := IndexInfo{}
+		info.ID = v.Uuid
+		info.Index = v.Index
+		info.Status = v.Status
+		info.Health = v.Health
+
+		info.Shards, _ = ToInt(v.Pri)
+		info.Replicas, _ = ToInt(v.Rep)
+		info.DocsCount, _ = ToInt64(v.DocsCount)
+		info.DocsDeleted, _ = ToInt64(v.DocsDeleted)
+		info.SegmentsCount, _ = ToInt64(v.SegmentCount)
+
+		info.StoreSize = v.StoreSize
+		info.PriStoreSize = v.PriStoreSize
+
+		indexInfo[v.Index] = info
+	}
+
+	return &indexInfo, nil
 }

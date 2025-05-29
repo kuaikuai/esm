@@ -601,3 +601,43 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 
 	//log.Infof("diffDocMaps=%+v", diffDocMaps)
 }
+
+func (m *Migrator) DiffCounts(srcEsApi ESAPI, dstEsApi ESAPI) {
+	srcIndices, err := srcEsApi.GetIndices("")
+	if err != nil {
+		fmt.Printf("failed to get source indices: %v", err)
+		return
+	}
+	dstIndices, err := dstEsApi.GetIndices("")
+	if err != nil {
+		fmt.Printf("failed to get destination indices: %v", err)
+		return
+	}
+	var same []string
+	var diff []string
+	var miss []string
+	for srcIndex, srcInfo := range *srcIndices {
+		if destInfo, ok := (*dstIndices)[srcIndex]; ok {
+			if srcInfo.DocsCount == destInfo.DocsCount {
+				same = append(same, srcIndex)
+			} else {
+				s := fmt.Sprintf("index %s : source=%d, destination=%d", srcIndex, srcInfo.DocsCount, destInfo.DocsCount)
+				diff = append(diff, s)
+			}
+		} else {
+			miss = append(miss, srcIndex)
+		}
+	}
+	fmt.Printf("==========equals===========\n")
+	for _, idx := range same {
+		fmt.Println(idx)
+	}
+	fmt.Printf("----------diff-------------\n")
+	for _, idx := range diff {
+		fmt.Println(idx)
+	}
+	fmt.Printf("----not in destination-----\n")
+	for _, idx := range miss {
+		fmt.Println(idx)
+	}
+}
