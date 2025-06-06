@@ -75,9 +75,12 @@ func main() {
 
 	if c.Sync {
 		//sync 功能时,只支持一个 index:
-		if len(c.SourceIndexNames) == 0 || len(c.TargetIndexName) == 0 {
+		if len(c.SourceIndexNames) == 0 {
 			log.Error("migration sync only support source 1 index to 1 target index")
 			return
+		}
+		if len(c.TargetIndexName) == 0 {
+			c.TargetIndexName = c.SourceIndexNames
 		}
 		migrator.SourceESAPI = migrator.ParseEsApi(true, c.SourceEs, c.SourceEsAuthStr, c.SourceProxy, c.Compress)
 		if migrator.SourceESAPI == nil {
@@ -147,6 +150,10 @@ func main() {
 
 				if c.ScrollSliceSize < 1 {
 					c.ScrollSliceSize = 1
+				}
+				// do read data
+				if c.OnlyMeta {
+					c.ScrollSliceSize = 0
 				}
 
 				totalSize := 0
@@ -372,11 +379,16 @@ func main() {
 								sourceIndexRefreshSettings[name] = ((*sourceIndexSettings)[name].(map[string]interface{}))["settings"].(map[string]interface{})["index"].(map[string]interface{})["refresh_interval"]
 
 								//set refresh_interval
-								tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["refresh_interval"] = -1
-								tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{})["number_of_replicas"] = 0
-
+								mapSettings := tempIndexSettings["settings"].(map[string]interface{})
+								mapIndex := mapSettings["index"].(map[string]interface{})
+								mapIndex["refresh_interval"] = -1
+								mapIndex["number_of_replicas"] = 0
+								//remove routing allocation
+								if _, ok := mapIndex["routing"]; ok && !c.RemainMappingRoutingAllocation {
+									delete(mapIndex, "routing")
+								}
 								//clean up settings
-								delete(tempIndexSettings["settings"].(map[string]interface{})["index"].(map[string]interface{}), "number_of_shards")
+								delete(mapIndex, "number_of_shards")
 
 								//copy indexsettings and mappings
 								if targetIndexExist {
@@ -440,7 +452,9 @@ func main() {
 				}
 
 			}
-
+			if c.OnlyMeta {
+				goto FIN
+			}
 			log.Info("start data migration..")
 
 			//start es bulk thread
@@ -460,7 +474,7 @@ func main() {
 			}
 
 			wg.Wait()
-
+		FIN:
 			if showBar {
 
 				outputBar.Finish()
