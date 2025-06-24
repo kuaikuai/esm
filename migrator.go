@@ -21,14 +21,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/cheggaaa/pb"
+	log "github.com/cihub/seelog"
+	"github.com/google/go-cmp/cmp"
 	"io"
 	"io/ioutil"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
-
-	log "github.com/cihub/seelog"
 )
 
 type BulkOperation uint8
@@ -412,6 +412,17 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 	return nil
 }
 
+func showDocs(message string, docs map[string]interface{}) {
+	count := 0
+	for k, _ := range docs {
+		count++
+		if count > 50 {
+			break
+		}
+		log.Infof("%s %s", message, k)
+	}
+}
+
 func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config) {
 	// _id => value
 	srcDocMaps := make(map[string]interface{})
@@ -487,10 +498,15 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 					delete(srcDocMaps, destId)
 
 					//如果从 src 的 map 中找到匹配地项
-					if !reflect.DeepEqual(srcSource, dstSource) {
+					if !cmp.Equal(srcSource, dstSource) {
 						//不相等, 则需要更新
 						diffDocMaps[destId] = srcSource
 						updateCount++
+						if cfg.Dry {
+							diff := cmp.Diff(srcSource, dstSource)
+							log.Infof("%s diff: %s", destId, diff)
+						}
+
 					} else {
 						//完全相等, 则不需要处理
 					}
@@ -516,10 +532,14 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 					diffDocMaps[srcId] = srcSource
 					addCount++
 				} else if dstSource, ok := dstDocMaps[srcId]; ok { //能从 dstDocMaps 中找到相同ID的数据
-					if !reflect.DeepEqual(srcSource, dstSource) {
+					if !cmp.Equal(srcSource, dstSource) {
 						//不完全相同,需要更新,否则忽略
 						diffDocMaps[srcId] = srcSource
 						updateCount++
+						if cfg.Dry {
+							diff := cmp.Diff(srcSource, dstSource)
+							log.Infof("%s diff: %s", srcId, diff)
+						}
 					}
 					//从 dst 中删除相同的
 					delete(dstDocMaps, srcId)
@@ -540,7 +560,11 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 
 		if len(diffDocMaps) > 0 {
 			log.Debugf("now will bulk index %d records", len(diffDocMaps))
-			_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, srcType, diffDocMaps))
+			if !cfg.Dry {
+				_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, srcType, diffDocMaps))
+			} else {
+				showDocs("diffDocMaps", diffDocMaps)
+			}
 			diffDocMaps = make(map[string]interface{})
 		}
 
@@ -573,12 +597,20 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 
 			if len(srcDocMaps) > 0 {
 				addCount += len(srcDocMaps)
-				_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, srcType, srcDocMaps))
+				if !cfg.Dry {
+					_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, srcType, srcDocMaps))
+				} else {
+					showDocs("srcDocs", srcDocMaps)
+				}
 			}
 			if len(dstDocMaps) > 0 {
 				//最后在 dst 中还有遗留的,表示 dst 中多的.需要删除
 				deleteCount += len(dstDocMaps)
-				_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, srcType, dstDocMaps))
+				if !cfg.Dry {
+					_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, srcType, dstDocMaps))
+				} else {
+					showDocs("delete", dstDocMaps)
+				}
 			}
 			break
 		}

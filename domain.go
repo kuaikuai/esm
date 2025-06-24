@@ -148,6 +148,7 @@ type Config struct {
 	DiffCounts                     bool `long:"diff_counts" description:"count the difference between source and target indexes"`
 	RemainMappingRoutingAllocation bool `long:"remain_routing_allocation" description:"keep routing allocation in mappings"`
 	OnlyMeta                       bool `long:"only_meta" description:"only sync meta"`
+	Dry                            bool `long:"dry" description:"only dry"`
 }
 
 type Auth struct {
