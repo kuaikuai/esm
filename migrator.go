@@ -523,7 +523,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			for idx, srcDocI := range srcScroll.GetDocs() {
 				srcId := srcDocI.(map[string]interface{})["_id"].(string)
 				srcSource := srcDocI.(map[string]interface{})["_source"]
-				srcType = srcDocI.(map[string]interface{})["_type"].(string)
+				//srcType = srcDocI.(map[string]interface{})["_type"].(string)
 				lastSrcId = srcId
 				log.Debugf("src [%d]: srcId=%s", srcRecordIndex+idx, srcId)
 
