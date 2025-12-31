@@ -149,6 +149,7 @@ type Config struct {
 	RemainMappingRoutingAllocation bool `long:"remain_routing_allocation" description:"keep routing allocation in mappings"`
 	OnlyMeta                       bool `long:"only_meta" description:"only sync meta"`
 	Dry                            bool `long:"dry" description:"only dry"`
+    EnableDelete                   bool `long:"enable_delete"          description:"enable delete records in dest index if there are more records"`
 }
 
 type Auth struct {
