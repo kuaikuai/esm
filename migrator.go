@@ -428,12 +428,13 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 	srcDocMaps := make(map[string]interface{})
 	dstDocMaps := make(map[string]interface{})
 	diffDocMaps := make(map[string]interface{})
+	newDocMaps := make(map[string]interface{})
 
 	srcRecordIndex := 0
 	dstRecordIndex := 0
 	var err error
 	srcType := ""
-    dstType := ""
+	dstType := ""
 	var srcScroll ScrollAPI = nil
 	var dstScroll ScrollAPI = nil
 	var emptyScroll = &EmptyScroll{}
@@ -512,7 +513,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 						//完全相等, 则不需要处理
 					}
 				} else {
-                    // 没有从 src 的 map 中找到匹配地项, 先放入 dstDocMaps 中等待后续对比
+					// 没有从 src 的 map 中找到匹配地项, 先放入 dstDocMaps 中等待后续对比
 					dstDocMaps[destId] = dstSource
 				}
 				//dstBar.Increment()
@@ -531,17 +532,12 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 
 				if len(lastDestId) == 0 {
 					//没有 destId, 表示 目标 index 中没有数据, 直接全部更新
-					diffDocMaps[srcId] = srcSource
+					newDocMaps[srcId] = srcSource
 					addCount++
 				} else if dstSource, ok := dstDocMaps[srcId]; ok { //能从 dstDocMaps 中找到相同ID的数据
 					if !cmp.Equal(srcSource, dstSource) {
 						//不完全相同,需要更新,否则忽略
 						diffDocMaps[srcId] = srcSource
-						updateCount++
-						if cfg.Dry {
-							diff := cmp.Diff(srcSource, dstSource)
-							log.Infof("id:%s diff: %s", srcId, diff)
-						}
 					}
 					//从 dst 中删除相同的
 					delete(dstDocMaps, srcId)
@@ -549,10 +545,9 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 					//找不到相同的 id, 可能是 dst 还没找到, 或者 dst 中不存在
 					if srcId < lastDestId {
 						//dest 已经超过当前的 srcId, 表示 dst 中不存在
-						diffDocMaps[srcId] = srcSource
-						addCount++
+						newDocMaps[srcId] = srcSource
 					} else {
-                        // dest 可能还没有遍历到, 先放入 srcDocMaps 中等待后续对比
+						// dest 可能还没有遍历到, 先放入 srcDocMaps 中等待后续对比
 						srcDocMaps[srcId] = srcSource
 					}
 				}
@@ -562,34 +557,46 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 		}
 
 		if len(diffDocMaps) > 0 {
-			log.Debugf("now will bulk index %d records", len(diffDocMaps))
+			updateCount += len(diffDocMaps)
+			log.Debugf("now will bulk update %d records", len(diffDocMaps))
 			if !cfg.Dry {
 				_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, srcType, diffDocMaps))
 			} else {
-				showDocs("diffDocMaps", diffDocMaps)
+				showDocs("diff", diffDocMaps)
 			}
 			diffDocMaps = make(map[string]interface{})
 		}
-		if len(srcDocMaps) > 0 && lastSrcId > lastDestId {
+		if len(newDocMaps) > 0 {
+			addCount += len(newDocMaps)
+			log.Debugf("now will bulk index %d records", len(diffDocMaps))
+			if !cfg.Dry {
+				_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, srcType, newDocMaps))
+			} else {
+				showDocs("new", newDocMaps)
+			}
+			newDocMaps = make(map[string]interface{})
+		}
+
+		if len(srcDocMaps) > 0 && lastSrcId < lastDestId {
 			// dst 已经中已经没有更多的记录, 可以直接将所有的 src 都同步到 dst 中了,避免其中保存太多
 			addCount += len(srcDocMaps)
-            if !cfg.Dry {
-                _ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, dstType, srcDocMaps))
-            } else {
-                showDocs("insert", srcDocMaps)
-            }
+			if !cfg.Dry {
+				_ = Verify(m.bulkRecords(opIndex, dstEsApi, cfg.TargetIndexName, dstType, srcDocMaps))
+			} else {
+				showDocs("insert", srcDocMaps)
+			}
 			srcDocMaps = make(map[string]interface{})
 		}
 
-		if len(dstDocMaps) > 0 && lastSrcId < lastDestId {
-			//dstDocMaps 中还有记录,而且当前已经检测过所有比 srcId 都大的数据
-            deleteCount += len(dstDocMaps)
-            if !cfg.Dry && cfg.EnableDelete {
-                _ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, dstType, dstDocMaps))
-            }
-            if cfg.Dry {
-                showDocs("delete", dstDocMaps)
-            }
+		if len(dstDocMaps) > 0 && lastSrcId > lastDestId {
+			//dstDocMaps 中还有记录,而且当前已经检测过所有的 src 记录, 说明这些 dst 记录是多余的,需要删除
+			deleteCount += len(dstDocMaps)
+			if !cfg.Dry && cfg.EnableDelete {
+				_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, dstType, dstDocMaps))
+			}
+			if cfg.Dry {
+				showDocs("delete", dstDocMaps)
+			}
 			dstDocMaps = make(map[string]interface{})
 		}
 
@@ -597,7 +604,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			needScrollSrc = true
 			needScrollDest = true
 		} else if len(lastDestId) == 0 || lastSrcId < lastDestId {
-            //len(lastDestId) == 0 表示dest数据为空
+			//len(lastDestId) == 0 表示dest数据为空
 			//上一次要求遍历 dest,但遍历出空
 			needScrollSrc = true
 			needScrollDest = false
@@ -606,12 +613,12 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			needScrollSrc = false
 			needScrollDest = true
 		}
-        if (needScrollSrc == true && len(srcScroll.GetDocs()) == 0) {
-            needScrollSrc = false
-        }
-        if (needScrollDest == true && len(dstScroll.GetDocs()) == 0) {
-            needScrollDest = false
-        }
+		if needScrollSrc == true && len(srcScroll.GetDocs()) == 0 {
+			needScrollSrc = false
+		}
+		if needScrollDest == true && len(dstScroll.GetDocs()) == 0 {
+			needScrollDest = false
+		}
 
 		//如果 src 和 dst 都遍历完毕, 才退出
 		log.Debugf("lastSrcId=%s, lastDestId=%s, "+
@@ -635,13 +642,13 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			}
 			if len(dstDocMaps) > 0 {
 				//最后在 dst 中还有遗留的,表示 dst 中多的.需要删除
-                deleteCount += len(dstDocMaps)
-                if !cfg.Dry && cfg.EnableDelete {
-                    _ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, srcType, dstDocMaps))
-                }
-                if cfg.Dry {
-                    showDocs("delete", dstDocMaps)
-                }
+				deleteCount += len(dstDocMaps)
+				if !cfg.Dry && cfg.EnableDelete {
+					_ = Verify(m.bulkRecords(opDelete, dstEsApi, cfg.TargetIndexName, srcType, dstDocMaps))
+				}
+				if cfg.Dry {
+					showDocs("delete", dstDocMaps)
+				}
 			}
 			break
 		}
