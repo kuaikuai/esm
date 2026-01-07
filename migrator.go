@@ -437,7 +437,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 	dstType := ""
 	var srcScroll ScrollAPI = nil
 	var dstScroll ScrollAPI = nil
-	var emptyScroll = &EmptyScroll{}
+	//var emptyScroll = &EmptyScroll{}
 	lastSrcId := ""
 	lastDestId := ""
 	needScrollSrc := true
@@ -474,8 +474,8 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			if err != nil {
 				log.Infof("can not scroll for dest index: %s, reason:%s", cfg.TargetIndexName, err.Error())
 				//生成一个 empty 的, 相当于直接bulk?
-				dstScroll = emptyScroll
-
+				//dstScroll = emptyScroll
+				return
 				//没有 dest index,以 src 的条数作为总数
 				//dstBar.Total = int64(srcScroll.GetHitsTotal()) // = pb.New(srcScroll.GetHitsTotal()).Prefix("Dest")
 			} else {
