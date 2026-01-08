@@ -16,8 +16,38 @@ limitations under the License.
 
 package main
 
-import ()
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	log "github.com/cihub/seelog"
+)
 
 type ESAPIV8 struct {
 	ESAPIV7
+}
+
+func (s *ESAPIV8) NextScroll(scrollTime string, scrollId string) (ScrollAPI, error) {
+	//id := bytes.NewBufferString(scrollId)
+	param := make(map[string]string)
+	param["scroll"] = scrollTime
+	param["scroll_id"] = scrollId
+	data, _ := json.Marshal(param)
+	reqData := bytes.NewBuffer(data)
+	url := fmt.Sprintf("%s/_search/scroll", s.Host)
+	body, err := Request(s.Compress, "GET", url, s.Auth, reqData, s.HttpProxy)
+
+	if err != nil {
+		//log.Error(errs)
+		return nil, err
+	}
+	// decode elasticsearch scroll response
+	scroll := &ScrollV7{}
+	err = DecodeJson(body, &scroll)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+
+	return scroll, nil
 }

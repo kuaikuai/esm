@@ -208,7 +208,7 @@ func Request(compress bool, method string, loadUrl string, auth *Auth, body *byt
 
 	oldTransport := client.Transport.(*http.Transport)
 	if len(proxy) > 0 {
-		proxyUrl := VerifyWithResult(url.Parse(proxy)).(*url.URL)
+		proxyUrl := VerifyWithResult(url.Parse(proxy))
 		proxyFunc := http.ProxyURL(proxyUrl)
 		oldTransport.Proxy = proxyFunc
 	} else {
@@ -233,8 +233,9 @@ func Request(compress bool, method string, loadUrl string, auth *Auth, body *byt
 	}
 
 	if resp.StatusCode != 200 {
-		b, _ := io.ReadAll(resp.Body)
-		return "", errors.New("server error: " + string(b))
+		b := VerifyWithResult(io.ReadAll(resp.Body))
+		return "", errors.New(
+			fmt.Sprintf("server error: code=%d, length=%d, info=", resp.StatusCode, resp.ContentLength) + string(b))
 	}
 
 	respBody, err := io.ReadAll(resp.Body)

@@ -458,13 +458,14 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			srcScroll, err = srcEsApi.NewScroll(cfg.SourceIndexNames, cfg.ScrollTime, cfg.DocBufferCount, cfg.Query,
 				cfg.SortField, 0, cfg.ScrollSliceSize, cfg.Fields)
 			if err != nil {
-				log.Infof("can not scroll for source index: %s, reason:%s", cfg.SourceIndexNames, err.Error())
+				log.Errorf("can not scroll for source index: %s, reason:%s", cfg.SourceIndexNames, err.Error())
 				return
 			}
 			log.Infof("src total count=%d", srcScroll.GetHitsTotal())
 			srcBar.Total = int64(srcScroll.GetHitsTotal())
 			srcBar.Start()
 		} else if needScrollSrc {
+			log.Debugf("source index: %s next scroll, source id: %s", cfg.SourceIndexNames, srcScroll.GetScrollId())
 			srcScroll = VerifyWithResult(srcEsApi.NextScroll(cfg.ScrollTime, srcScroll.GetScrollId())).(ScrollAPI)
 		}
 
@@ -472,12 +473,8 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			dstScroll, err = dstEsApi.NewScroll(cfg.TargetIndexName, cfg.ScrollTime, cfg.DocBufferCount, cfg.Query,
 				cfg.SortField, 0, cfg.ScrollSliceSize, cfg.Fields)
 			if err != nil {
-				log.Infof("can not scroll for dest index: %s, reason:%s", cfg.TargetIndexName, err.Error())
-				//生成一个 empty 的, 相当于直接bulk?
-				//dstScroll = emptyScroll
+				log.Errorf("can not scroll for dest index: %s, , reason:%s", cfg.TargetIndexName, err.Error())
 				return
-				//没有 dest index,以 src 的条数作为总数
-				//dstBar.Total = int64(srcScroll.GetHitsTotal()) // = pb.New(srcScroll.GetHitsTotal()).Prefix("Dest")
 			} else {
 				//有 dest index,
 				//dstBar.Total = int64(dstScroll.GetHitsTotal()) // pb.New(dstScroll.GetHitsTotal()).Prefix("Dest")
@@ -485,6 +482,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			//dstBar.Start()
 			log.Infof("dst total count=%d", dstScroll.GetHitsTotal())
 		} else if needScrollDest {
+			log.Debugf("source index: %s next scroll, source id: %s", cfg.TargetIndexName, dstScroll.GetScrollId())
 			dstScroll = VerifyWithResult(dstEsApi.NextScroll(cfg.ScrollTime, dstScroll.GetScrollId())).(ScrollAPI)
 		}
 
@@ -500,7 +498,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 					delete(srcDocMaps, destId)
 
 					//如果从 src 的 map 中找到匹配地项
-					if !cmp.Equal(srcSource, dstSource) {
+					if !cfg.IgnoreContentCompare && !cmp.Equal(srcSource, dstSource) {
 						//不相等, 则需要更新
 						diffDocMaps[destId] = srcSource
 						updateCount++
@@ -535,7 +533,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 					newDocMaps[srcId] = srcSource
 					addCount++
 				} else if dstSource, ok := dstDocMaps[srcId]; ok { //能从 dstDocMaps 中找到相同ID的数据
-					if !cmp.Equal(srcSource, dstSource) {
+					if !cfg.IgnoreContentCompare && !cmp.Equal(srcSource, dstSource) {
 						//不完全相同,需要更新,否则忽略
 						diffDocMaps[srcId] = srcSource
 					}
