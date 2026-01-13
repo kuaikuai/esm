@@ -16,16 +16,19 @@ limitations under the License.
 
 package main
 
-import "sync"
+import (
+	"encoding/json"
+	"sync"
+)
 
 type Indexes map[string]interface{}
 
 type Document struct {
-	Index   string                 `json:"_index,omitempty"`
-	Type    string                 `json:"_type,omitempty"`
-	Id      string                 `json:"_id,omitempty"`
-	source  map[string]interface{} `json:"_source,omitempty"`
-	Routing string                 `json:"routing,omitempty"` //after 6, only `routing` was supported
+	Index   string          `json:"_index,omitempty"`
+	Type    string          `json:"_type,omitempty"`
+	Id      string          `json:"_id,omitempty"`
+	Source  json.RawMessage `json:"_source,omitempty"`
+	Routing string          `json:"routing,omitempty"` //after 6, only `routing` was supported
 }
 
 type Scroll struct {
@@ -33,9 +36,9 @@ type Scroll struct {
 	ScrollId string `json:"_scroll_id,omitempty"`
 	TimedOut bool   `json:"timed_out,omitempty"`
 	Hits     struct {
-		MaxScore float32       `json:"max_score,omitempty"`
-		Total    int           `json:"total,omitempty"`
-		Docs     []interface{} `json:"hits,omitempty"`
+		MaxScore float32    `json:"max_score,omitempty"`
+		Total    int        `json:"total,omitempty"`
+		Docs     []Document `json:"hits,omitempty"`
 	} `json:"hits"`
 	Shards struct {
 		Total      int `json:"total,omitempty"`
@@ -59,7 +62,7 @@ type ScrollV7 struct {
 			Value    int    `json:"value,omitempty"`
 			Relation string `json:"relation,omitempty"`
 		} `json:"total,omitempty"`
-		Docs []interface{} `json:"hits,omitempty"`
+		Docs []Document `json:"hits,omitempty"`
 	} `json:"hits"`
 }
 
@@ -94,7 +97,7 @@ type Action struct {
 
 type Migrator struct {
 	FlushLock   sync.Mutex
-	DocChan     chan map[string]interface{}
+	DocChan     chan Document
 	SourceESAPI ESAPI
 	TargetESAPI ESAPI
 	SourceAuth  *Auth
@@ -141,16 +144,17 @@ type Config struct {
 	LogstashEndpoint    string `short:"l"  long:"logstash_endpoint"    description:"target logstash tcp endpoint, ie: 127.0.0.1:5055" `
 	LogstashSecEndpoint bool   `long:"secured_logstash_endpoint"    description:"target logstash tcp endpoint was secured by TLS" `
 
-	RepeatOutputTimes              int  `long:"repeat_times"            description:"repeat the data from source N times to dest output, use align with parameter regenerate_id to amplify the data size "`
-	RegenerateID                   bool `short:"r" long:"regenerate_id"   description:"regenerate id for documents, this will override the exist document id in data source"`
-	Compress                       bool `long:"compress"            description:"use gzip to compress traffic"`
-	SleepSecondsAfterEachBulk      int  `short:"p" long:"sleep" description:"sleep N seconds after each bulk request" default:"-1"`
-	DiffCounts                     bool `long:"diff_counts" description:"count the difference between source and target indexes"`
-	RemainMappingRoutingAllocation bool `long:"remain_routing_allocation" description:"keep routing allocation in mappings"`
-	OnlyMeta                       bool `long:"only_meta" description:"only sync meta"`
-	Dry                            bool `long:"dry" description:"only dry"`
-	EnableDelete                   bool `long:"enable_delete"          description:"enable delete records in dest index if there are more records"`
-	IgnoreContentCompare           bool `long:"ignore_content_compare" description:"ignore to compare the content of a record"`
+	RepeatOutputTimes              int    `long:"repeat_times"            description:"repeat the data from source N times to dest output, use align with parameter regenerate_id to amplify the data size "`
+	RegenerateID                   bool   `short:"r" long:"regenerate_id"   description:"regenerate id for documents, this will override the exist document id in data source"`
+	Compress                       bool   `long:"compress"            description:"use gzip to compress traffic"`
+	SleepSecondsAfterEachBulk      int    `short:"p" long:"sleep" description:"sleep N seconds after each bulk request" default:"-1"`
+	DiffCounts                     bool   `long:"diff_counts" description:"count the difference between source and target indexes"`
+	RemainMappingRoutingAllocation bool   `long:"remain_routing_allocation" description:"keep routing allocation in mappings"`
+	OnlyMeta                       bool   `long:"only_meta" description:"only sync meta"`
+	Dry                            bool   `long:"dry" description:"only dry"`
+	EnableDelete                   bool   `long:"enable_delete"          description:"enable delete records in dest index if there are more records"`
+	IgnoreContentCompare           bool   `long:"ignore_content_compare" description:"ignore to compare the content of a record"`
+	IgnoreFieldsInCompare          string `long:"ignore_compare_fields" description:"fields to ignore when compare documents, comma separated, ie: col1,col2,col3,..." `
 }
 
 type Auth struct {

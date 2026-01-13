@@ -127,7 +127,7 @@ func main() {
 			}
 
 			// enough of a buffer to hold all the search results across all workers
-			migrator.DocChan = make(chan map[string]interface{}, c.BufferCount)
+			migrator.DocChan = make(chan Document, c.BufferCount)
 
 			//var srcESVersion *ClusterVersion
 			// create a progressbar and start a docCount

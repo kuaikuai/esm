@@ -52,7 +52,7 @@ func (m *Migrator) NewFileReadWorker(pb *pb.ProgressBar, wg *sync.WaitGroup) {
 			break
 		}
 		lineCount += 1
-		js := map[string]interface{}{}
+		js := Document{}
 
 		err = DecodeJson(line, &js)
 		if err != nil {
@@ -108,29 +108,31 @@ func (c *Migrator) NewFileDumpWorker(pb *pb.ProgressBar, wg *sync.WaitGroup) {
 		}
 	}
 
-READ_DOCS:
+	//READ_DOCS:
 	for {
 		docI, open := <-c.DocChan
 		// this check is in case the document is an error with scroll stuff
-		if status, ok := docI["status"]; ok {
-			if status.(int) == 404 {
-				log.Error("error: ", docI["response"])
-				continue
+		/*
+			if status, ok := docI["status"]; ok {
+				if status.(int) == 404 {
+					log.Error("error: ", docI["response"])
+					continue
+				}
 			}
-		}
-
+		*/
 		// sanity check
-		for _, key := range []string{"_index", "_type", "_source", "_id"} {
-			if _, ok := docI[key]; !ok {
-				break READ_DOCS
+		/*
+			for _, key := range []string{"_index", "_type", "_source", "_id"} {
+				if _, ok := docI[key]; !ok {
+					break READ_DOCS
+				}
 			}
-		}
-		for _, key := range skipFields {
-			if _, found := docI[key]; found {
-				delete(docI, key)
+			for _, key := range skipFields {
+				if _, found := docI[key]; found {
+					delete(docI, key)
+				}
 			}
-		}
-
+		*/
 		jsr, err := json.Marshal(docI)
 		log.Trace(string(jsr))
 		if err != nil {

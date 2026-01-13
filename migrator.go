@@ -1,17 +1,17 @@
 /*
-Copyright 2016 Medcl (m AT medcl.net)
+   Copyright 2016 Medcl (m AT medcl.net)
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-   http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 
 package main
@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"github.com/cheggaaa/pb"
 	log "github.com/cihub/seelog"
-	"github.com/google/go-cmp/cmp"
+	//"github.com/google/go-cmp/cmp"
 	"io"
 	"io/ioutil"
 	"reflect"
@@ -206,39 +206,26 @@ func (m *Migrator) NewBulkWorker(docCount *int, pb *pb.ProgressBar, wg *sync.Wai
 	if reflect.TypeOf(m.TargetESAPI).String() == "*main.ESAPIV8" {
 		haveTypeField = false
 	}
-	checkKeys := []string{"_index", "_type", "_source", "_id"}
-	if !haveTypeField {
-		checkKeys = []string{"_index", "_source", "_id"}
-	}
+	/*
+		checkKeys := []string{"_index", "_type", "_source", "_id"}
+		if !haveTypeField {
+			checkKeys = []string{"_index", "_source", "_id"}
+		}
+	*/
 
 READ_DOCS:
 	for {
 		idleTimeout.Reset(idleDuration)
 		taskTimeout.Reset(taskTimeOutDuration)
 		select {
-		case docI, open := <-m.DocChan:
+		case src, open := <-m.DocChan:
 			var err error
-			log.Trace("read doc from channel,", docI)
-			// this check is in case the document is an error with scroll stuff
-			if status, ok := docI["status"]; ok {
-				if status.(int) == 404 {
-					log.Error("error: ", docI["response"])
-					continue
-				}
-			}
-
-			// sanity check
-			for _, key := range checkKeys {
-				if _, ok := docI[key]; !ok {
-					break READ_DOCS
-				}
-			}
-
+			//log.Trace("read doc from channel,", src)
 			var tempDestIndexName string
 			var tempTargetTypeName string
-			tempDestIndexName = docI["_index"].(string)
+			tempDestIndexName = src.Index
 			if haveTypeField {
-				tempTargetTypeName = docI["_type"].(string)
+				tempTargetTypeName = src.Type
 			}
 			if m.Config.TargetIndexName != "" {
 				tempDestIndexName = m.Config.TargetIndexName
@@ -247,45 +234,34 @@ READ_DOCS:
 			if m.Config.OverrideTypeName != "" {
 				tempTargetTypeName = m.Config.OverrideTypeName
 			}
-
 			doc := Document{
 				Index: tempDestIndexName,
 				//Type:   tempTargetTypeName,
-				source: docI["_source"].(map[string]interface{}),
-				Id:     docI["_id"].(string),
+				//Source:  src.Source,
+				Id:      src.Id,
+				Routing: src.Routing,
 			}
 			if haveTypeField {
 				doc.Type = tempTargetTypeName
 			}
-
 			if m.Config.RegenerateID {
 				doc.Id = ""
 			}
-
-			if m.Config.RenameFields != "" {
-				kvs := strings.Split(m.Config.RenameFields, ",")
-				for _, i := range kvs {
-					fvs := strings.Split(i, ":")
-					oldField := strings.TrimSpace(fvs[0])
-					newField := strings.TrimSpace(fvs[1])
-					if oldField == "_type" {
-						doc.source[newField] = docI["_type"].(string)
-					} else {
-						v := doc.source[oldField]
-						doc.source[newField] = v
-						delete(doc.source, oldField)
-					}
-				}
-			}
-
-			// add doc "_routing" if exists
-			if _, ok := docI["_routing"]; ok {
-				str, ok := docI["_routing"].(string)
-				if ok && str != "" {
-					doc.Routing = str
-				}
-			}
-
+			// 暂不再支持
+			/*
+							if m.Config.RenameFields != "" {
+								kvs := strings.Split(m.Config.RenameFields, ",")
+								for _, i := range kvs {
+									fvs := strings.Split(i, ":")
+									oldField := strings.TrimSpace(fvs[0])
+									newField := strings.TrimSpace(fvs[1])
+									if oldField == "_type" {
+										doc.Type = docI.Type
+									} else {
+				                        //todo
+									}
+								}
+							}*/
 			// if channel is closed flush and gtfo
 			if !open {
 				goto WORKER_DONE
@@ -304,12 +280,9 @@ READ_DOCS:
 			if err = docEnc.Encode(post); err != nil {
 				log.Error(err)
 			}
-			if err = docEnc.Encode(doc.source); err != nil {
-				log.Error(err)
-			}
-
 			// append the doc to the main buffer
 			mainBuf.Write(docBuf.Bytes())
+			mainBuf.Write(src.Source)
 			// reset for next document
 			bulkItemSize++
 			(*docCount)++
@@ -351,7 +324,7 @@ WORKER_DONE:
 	wg.Done()
 }
 
-func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex string, targetType string, diffDocMaps map[string]interface{}) error {
+func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex string, targetType string, diffDocMaps map[string]json.RawMessage) error {
 	//var err error
 	docCount := 0
 	bulkItemSize := 0
@@ -367,7 +340,6 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 	}
 
 	for docId, docData := range diffDocMaps {
-		docI := docData.(map[string]interface{})
 		log.Debugf("now will bulk %s docId=%s, docData=%+v", bulkOp, docId, docData)
 		//tempDestIndexName = docI["_index"].(string)
 		//tempTargetTypeName = docI["_type"].(string)
@@ -382,7 +354,6 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 		}
 		switch bulkOp {
 		case opIndex:
-			doc.source = docI // docI["_source"].(map[string]interface{}),
 			strOperation = "index"
 		case opDelete:
 			strOperation = "delete"
@@ -396,7 +367,10 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 		}
 		_ = Verify(docEnc.Encode(post))
 		if bulkOp == opIndex {
-			_ = Verify(docEnc.Encode(doc.source))
+			_, _ = docBuf.Write(docData)
+			if docData[len(docData)-1] != byte('\n') {
+				_, _ = docBuf.Write([]byte{'\n'})
+			}
 		}
 		// append the doc to the main buffer
 		mainBuf.Write(docBuf.Bytes())
@@ -412,7 +386,7 @@ func (m *Migrator) bulkRecords(bulkOp BulkOperation, dstEsApi ESAPI, targetIndex
 	return nil
 }
 
-func showDocs(message string, docs map[string]interface{}) {
+func showDocs(message string, docs map[string]json.RawMessage) {
 	count := 0
 	for k, _ := range docs {
 		count++
@@ -425,10 +399,10 @@ func showDocs(message string, docs map[string]interface{}) {
 
 func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config) {
 	// _id => value
-	srcDocMaps := make(map[string]interface{})
-	dstDocMaps := make(map[string]interface{})
-	diffDocMaps := make(map[string]interface{})
-	newDocMaps := make(map[string]interface{})
+	srcDocMaps := make(map[string]json.RawMessage)
+	dstDocMaps := make(map[string]json.RawMessage)
+	diffDocMaps := make(map[string]json.RawMessage)
+	newDocMaps := make(map[string]json.RawMessage)
 
 	srcRecordIndex := 0
 	dstRecordIndex := 0
@@ -465,8 +439,13 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			srcBar.Total = int64(srcScroll.GetHitsTotal())
 			srcBar.Start()
 		} else if needScrollSrc {
+			start := time.Now()
 			log.Debugf("source index: %s next scroll, source id: %s", cfg.SourceIndexNames, srcScroll.GetScrollId())
 			srcScroll = VerifyWithResult(srcEsApi.NextScroll(cfg.ScrollTime, srcScroll.GetScrollId())).(ScrollAPI)
+			if cfg.Dry {
+				elapsed := time.Since(start)
+				fmt.Printf("src scroll : %s\n", elapsed)
+			}
 		}
 
 		if dstScroll == nil {
@@ -482,15 +461,21 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			//dstBar.Start()
 			log.Infof("dst total count=%d", dstScroll.GetHitsTotal())
 		} else if needScrollDest {
+			start := time.Now()
 			log.Debugf("source index: %s next scroll, source id: %s", cfg.TargetIndexName, dstScroll.GetScrollId())
 			dstScroll = VerifyWithResult(dstEsApi.NextScroll(cfg.ScrollTime, dstScroll.GetScrollId())).(ScrollAPI)
+			if cfg.Dry {
+				elapsed := time.Since(start)
+				fmt.Printf("dest scroll : %s\n", elapsed)
+			}
 		}
 
 		//从目标 index 中查询,并放入 destMap, 如果没有则是空
 		if needScrollDest {
-			for idx, dstDocI := range dstScroll.GetDocs() {
-				destId := dstDocI.(map[string]interface{})["_id"].(string)
-				dstSource := dstDocI.(map[string]interface{})["_source"]
+			start := time.Now()
+			for idx, dstDoc := range dstScroll.GetDocs() {
+				destId := dstDoc.Id
+				dstSource := dstDoc.Source
 				lastDestId = destId
 				log.Debugf("dst [%d]: dstId=%s", dstRecordIndex+idx, destId)
 
@@ -498,13 +483,12 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 					delete(srcDocMaps, destId)
 
 					//如果从 src 的 map 中找到匹配地项
-					if !cfg.IgnoreContentCompare && !cmp.Equal(srcSource, dstSource) {
+					if !cfg.IgnoreContentCompare && !bytes.Equal(srcSource, dstSource) {
 						//不相等, 则需要更新
 						diffDocMaps[destId] = srcSource
-						updateCount++
 						if cfg.Dry {
-							diff := cmp.Diff(srcSource, dstSource)
-							log.Infof("%s diff: %s", destId, diff)
+							//diff := cmp.Diff(srcSource, dstSource)
+							//log.Infof("%s diff: %s", destId, diff)
 						}
 
 					} else {
@@ -517,13 +501,18 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 				//dstBar.Increment()
 			}
 			dstRecordIndex += len(dstScroll.GetDocs())
+			if cfg.Dry {
+				elapsed := time.Since(start)
+				fmt.Printf("dest compare : %s\n", elapsed)
+			}
 		}
 
 		//先将 src 的当前批次查出并放入 map
 		if needScrollSrc {
-			for idx, srcDocI := range srcScroll.GetDocs() {
-				srcId := srcDocI.(map[string]interface{})["_id"].(string)
-				srcSource := srcDocI.(map[string]interface{})["_source"]
+			start := time.Now()
+			for idx, srcDoc := range srcScroll.GetDocs() {
+				srcId := srcDoc.Id
+				srcSource := srcDoc.Source
 				//srcType = srcDocI.(map[string]interface{})["_type"].(string)
 				lastSrcId = srcId
 				log.Debugf("src [%d]: srcId=%s", srcRecordIndex+idx, srcId)
@@ -531,9 +520,8 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 				if len(lastDestId) == 0 {
 					//没有 destId, 表示 目标 index 中没有数据, 直接全部更新
 					newDocMaps[srcId] = srcSource
-					addCount++
 				} else if dstSource, ok := dstDocMaps[srcId]; ok { //能从 dstDocMaps 中找到相同ID的数据
-					if !cfg.IgnoreContentCompare && !cmp.Equal(srcSource, dstSource) {
+					if !cfg.IgnoreContentCompare && !bytes.Equal(srcSource, dstSource) {
 						//不完全相同,需要更新,否则忽略
 						diffDocMaps[srcId] = srcSource
 					}
@@ -552,6 +540,10 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 				srcBar.Increment()
 			}
 			srcRecordIndex += len(srcScroll.GetDocs())
+			if cfg.Dry {
+				elapsed := time.Since(start)
+				fmt.Printf("src compare : %s\n", elapsed)
+			}
 		}
 
 		if len(diffDocMaps) > 0 {
@@ -562,7 +554,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			} else {
 				showDocs("diff", diffDocMaps)
 			}
-			diffDocMaps = make(map[string]interface{})
+			diffDocMaps = make(map[string]json.RawMessage)
 		}
 		if len(newDocMaps) > 0 {
 			addCount += len(newDocMaps)
@@ -572,7 +564,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			} else {
 				showDocs("new", newDocMaps)
 			}
-			newDocMaps = make(map[string]interface{})
+			newDocMaps = make(map[string]json.RawMessage)
 		}
 
 		if len(srcDocMaps) > 0 && lastSrcId < lastDestId {
@@ -583,7 +575,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			} else {
 				showDocs("insert", srcDocMaps)
 			}
-			srcDocMaps = make(map[string]interface{})
+			srcDocMaps = make(map[string]json.RawMessage)
 		}
 
 		if len(dstDocMaps) > 0 && lastSrcId > lastDestId {
@@ -595,7 +587,7 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			if cfg.Dry {
 				showDocs("delete", dstDocMaps)
 			}
-			dstDocMaps = make(map[string]interface{})
+			dstDocMaps = make(map[string]json.RawMessage)
 		}
 
 		if lastSrcId == lastDestId {
@@ -656,8 +648,8 @@ func (m *Migrator) SyncBetweenIndex(srcEsApi ESAPI, dstEsApi ESAPI, cfg *Config)
 			time.Sleep(time.Duration(cfg.SleepSecondsAfterEachBulk) * time.Second)
 		}
 	}
-	_ = Verify(srcEsApi.DeleteScroll(srcScroll.GetScrollId()))
-	_ = Verify(dstEsApi.DeleteScroll(dstScroll.GetScrollId()))
+	srcEsApi.DeleteScroll(srcScroll.GetScrollId())
+	dstEsApi.DeleteScroll(dstScroll.GetScrollId())
 
 	srcBar.FinishPrint("Source End")
 	//dstBar.FinishPrint("Dest End")
